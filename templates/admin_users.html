@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin - Manage Users</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-pink-900 text-white p-6">
+  <div class="max-w-5xl mx-auto bg-white/10 backdrop-blur-lg border border-white/20 rounded-xl p-6">
+    <h1 class="text-2xl font-bold mb-6">👥 Admin: Manage Users</h1>
+
+    <!-- Add User -->
+    <form method="POST" class="mb-6 grid md:grid-cols-4 gap-4 items-end">
+      <input type="hidden" name="action" value="add">
+      <input name="username" placeholder="Username" required class="px-4 py-2 rounded bg-white/10 border border-white/20 text-sm" />
+      <input name="password" placeholder="Password" required class="px-4 py-2 rounded bg-white/10 border border-white/20 text-sm" />
+      <select name="role" class="px-4 py-2 rounded bg-white/10 border border-white/20 text-sm">
+                        <option value="manager">Manager</option>
+                        <option value="salesagent">Sales Agent</option>
+                        <option value="admin">Admin</option>
+      </select>
+      <button type="submit" class="bg-purple-600 px-4 py-2 rounded text-white hover:bg-purple-700 text-sm">Add User</button>
+    </form>
+
+    <!-- User Table -->
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm table-auto border border-white/20">
+        <thead>
+          <tr class="bg-white/10">
+            <th class="px-4 py-2 text-left">Username</th>
+            <th class="px-4 py-2">Role</th>
+            <th class="px-4 py-2">Change Role</th>
+            <th class="px-4 py-2">New Password</th>
+            <th class="px-4 py-2">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+          <tr class="border-t border-white/10">
+            <td class="px-4 py-2">{{ user.username }}</td>
+            <td class="px-4 py-2">{{ user.role }}</td>
+            <td class="px-4 py-2">
+              <form method="POST" class="flex space-x-2">
+                <input type="hidden" name="action" value="update">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <select name="role" class="px-2 py-1 bg-white/10 border border-white/20 rounded">
+                  <option value="user" {% if user.role == 'manager' %}selected{% endif %}>Manager</option>
+                  <option value="user" {% if user.role == 'salesagent' %}selected{% endif %}>Sales Agent</option>
+                  <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+                </select>
+            </td>
+            <td class="px-4 py-2">
+              <input name="password" placeholder="New Password" class="px-2 py-1 bg-white/10 border border-white/20 rounded" />
+            </td>
+            <td class="px-4 py-2 flex space-x-2">
+              <button type="submit" class="bg-blue-600 px-2 py-1 rounded text-white hover:bg-blue-700 text-xs">Update</button>
+              </form>
+              <form method="POST">
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <button type="submit" class="bg-red-600 px-2 py-1 rounded text-white hover:bg-red-700 text-xs"
+                {% if user.username == 'admin' %}disabled class="opacity-50 cursor-not-allowed"{% endif %}>
+                  Delete
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="mt-4">
+      <a href="/" class="text-purple-300 underline hover:text-purple-200">← Back to App</a>
+    </div>
+  </div>
+</body>
+</html>
