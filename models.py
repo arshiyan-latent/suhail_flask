@@ -32,3 +32,4 @@ class ChatSession(db.Model):
     user_id = db.Column(db.Integer, nullable=False)
     title = db.Column(db.String(100), default='Untitled Chat')
     created_at = db.Column(db.DateTime, default=datetime.now())
+    client_name = db.Column(db.String(100), nullable=True)  # Simple client name for now, can be extended later into a full Client model if needed

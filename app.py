@@ -1,4 +1,5 @@
 # app.py
+from webbrowser import get
 from agents.agent import supervisor_agent
 from dotenv import load_dotenv
 import os
@@ -39,12 +40,22 @@ def role_required(role):
         return decorated_view
     return wrapper
 
+#helper function to get clients
+
+def get_clients_for_user(user_id):
+    """Helper function """
+    clients = db.session.query(ChatSession.client_name).filter(
+        ChatSession.user_id == user_id,
+        ChatSession.client_name.isnot(None)
+    ).distinct().all()
+    return [{'name': client[0]} for client in clients if client[0]]
 
 
 @app.route('/')
 @login_required
 def home():
-    return render_template('chat.html', username=current_user.username, role=current_user.role,user_id = current_user.id)
+    clients = get_clients_for_user(current_user.id)
+    return render_template('chat.html', username=current_user.username, role=current_user.role,user_id = current_user.id, clients=clients)
 
 @app.route('/admin')
 @role_required('admin')
@@ -128,7 +139,13 @@ def manage_users():
 @login_required
 def sales_agent():
     data = request.json
-    print(data)
+    
+    # Get the chat session to find client info
+    chat = ChatSession.query.get(data['chat_id'])
+    client_info = f" | Client: {chat.client_name}" if chat and chat.client_name else " | Client: General"
+    
+    print(f"💬 {data}{client_info}")
+    
     config = {"configurable": {"thread_id": data['chat_id']}}
     
 
@@ -144,14 +161,100 @@ def sales_agent():
 
 
 @app.route("/v1/chat/newchat",methods=['POST'])
+@login_required
 def new_chat_id():
     user_id = int(request.json['user_id'])
-    chat_id =uuid.uuid4()
-    new_chat = ChatSession(id=str(chat_id), user_id=user_id)
+    client_name = request.json.get('client_name')  # Optional client name
+    chat_id = uuid.uuid4()
+    
+    new_chat = ChatSession(id=str(chat_id), user_id=user_id, client_name=client_name)
     db.session.add(new_chat)
     db.session.commit()
 
-    return jsonify({'id':chat_id})
+    return jsonify({'id': chat_id})
+
+# Create client endpoint
+@app.route('/v1/clients', methods=['POST'])
+@login_required
+def create_client():
+    client_name = request.json.get('name', '').strip()
+    if not client_name:
+        return jsonify({'error': 'Client name required'}), 400
+    
+    # This saves the client in the database for future reference
+    chat_id = uuid.uuid4()
+    new_chat = ChatSession(
+        id=str(chat_id), 
+        user_id=current_user.id, 
+        client_name=client_name,
+        title=f"Chat with {client_name}"
+    )
+    db.session.add(new_chat)
+    db.session.commit()
+    
+    return jsonify({'name': client_name, 'success': True, 'chat_id': str(chat_id)})
+
+# Get clients for current user
+@app.route('/v1/clients', methods=['GET'])
+@login_required
+def get_clients():
+    clients = db.session.query(ChatSession.client_name).filter(
+        ChatSession.user_id == current_user.id,
+        ChatSession.client_name.isnot(None)
+    ).distinct().all()
+    
+    client_list = [{'name': client[0]} for client in clients if client[0]]
+    return jsonify(client_list)
+
+# Find existing chat for client
+@app.route('/v1/clients/<client_name>/chat', methods=['GET'])
+@login_required
+def find_client_chat(client_name):
+    existing_chat = ChatSession.query.filter_by(
+        user_id=current_user.id,
+        client_name=client_name
+    ).first()
+    
+    if existing_chat:
+        print("Chat exists")
+        return jsonify({'chat_id': existing_chat.id, 'exists': True})
+    else:
+        print("Chat does not exist")
+        return jsonify({'exists': False})
+
+# Delete client (deletes all chats for that client)
+@app.route('/v1/clients/<client_name>', methods=['DELETE'])
+@login_required
+def delete_client(client_name):
+    # Delete all chat sessions for this client
+    deleted_count = ChatSession.query.filter_by(
+        user_id=current_user.id,
+        client_name=client_name
+    ).delete()
+    
+    db.session.commit()
+    return jsonify({'success': True, 'deleted_chats': deleted_count})
+
+# Edit client name (updates all chats for that client)
+@app.route('/v1/clients/<old_name>/rename', methods=['PUT'])
+@login_required
+def rename_client(old_name):
+    new_name = request.json.get('new_name', '').strip()
+    if not new_name:
+        return jsonify({'error': 'New name required'}), 400
+    
+    # Update all chat sessions for this client
+    updated_count = ChatSession.query.filter_by(
+        user_id=current_user.id,
+        client_name=old_name
+    ).update({'client_name': new_name})
+    
+    if updated_count == 0:
+        return jsonify({'error': 'Client not found'}), 404
+    
+    db.session.commit()
+    return jsonify({'success': True, 'updated_chats': updated_count, 'new_name': new_name})
+        
 
 if __name__ == '__main__':
     with app.app_context():
