@@ -9,7 +9,7 @@ load_dotenv()
 
 from flask import Flask, render_template, request, redirect, url_for, flash,jsonify
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
-from models import db, User, ChatSession
+from models import db, User, ChatSession, ChatMessage
 import uuid
 
 app = Flask(__name__)
@@ -139,25 +139,36 @@ def manage_users():
 @login_required
 def sales_agent():
     data = request.json
-    
-    # Get the chat session to find client info
-    chat = ChatSession.query.get(data['chat_id'])
-    client_info = f" | Client: {chat.client_name}" if chat and chat.client_name else " | Client: General"
-    
-    print(f"💬 {data}{client_info}")
-    
-    config = {"configurable": {"thread_id": data['chat_id']}}
-    
+    chat_id = data['chat_id']
+    user_message = data['message']
 
+    # Save user message
+    user_msg = ChatMessage(
+        session_id=chat_id,
+        user_id=current_user.id,
+        message=user_message,
+        sender='user'
+    )
+    db.session.add(user_msg)
+
+    # Run the bot
     result = supervisor_agent.invoke({
-            "messages": [{
-                "role": "user",
-                "content": data['message']
-            }]
-        }, config=config)
+        "messages": [{"role": "user", "content": user_message}]
+    }, config={"configurable": {"thread_id": chat_id}})
 
-    data = {"ai_response": result['messages'][-1].content}
-    return jsonify(data['ai_response'])
+    ai_response = result['messages'][-1].content
+
+    # Save bot response
+    bot_msg = ChatMessage(
+        session_id=chat_id,
+        user_id=current_user.id,
+        message=ai_response,
+        sender='bot'
+    )
+    db.session.add(bot_msg)
+
+    db.session.commit()
+    return jsonify(ai_response)
 
 
 @app.route("/v1/chat/newchat",methods=['POST'])
@@ -167,7 +178,7 @@ def new_chat_id():
     client_name = request.json.get('client_name')  # Optional client name
     chat_id = uuid.uuid4()
     
-    new_chat = ChatSession(id=str(chat_id), user_id=user_id, client_name=client_name)
+    new_chat = ChatSession(id=str(chat_id), user_id=current_user.id, title = "Untitled", client_name=client_name)
     db.session.add(new_chat)
     db.session.commit()
 
@@ -255,6 +266,36 @@ def rename_client(old_name):
     db.session.commit()
     return jsonify({'success': True, 'updated_chats': updated_count, 'new_name': new_name})
         
+@app.route("/v1/chat/sessions", methods=['GET'])
+@login_required
+def get_user_chats():
+    sessions = ChatSession.query.filter_by(user_id=current_user.id).order_by(ChatSession.created_at.desc()).all()
+    return jsonify([
+        {'id': s.id, 'title': s.title, 'created_at': s.created_at.isoformat()}
+        for s in sessions
+    ])
+
+@app.route('/v1/chat/loadchat/<chat_id>', methods=['GET'])
+@login_required
+def load_chat(chat_id):
+    # Ensure this chat belongs to the user
+    session = ChatSession.query.filter_by(id=chat_id, user_id=current_user.id).first()
+    if not session:
+        return jsonify({'error': 'Chat session not found'}), 404
+
+    messages = ChatMessage.query.filter_by(
+        session_id=chat_id
+    ).order_by(ChatMessage.timestamp).all()
+
+    return jsonify([
+        {
+            'content': m.message,
+            'role': m.sender,  # either 'user' or 'bot'
+            'timestamp': m.timestamp.isoformat()
+        }
+        for m in messages
+    ])
+
 
 if __name__ == '__main__':
     with app.app_context():

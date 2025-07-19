@@ -279,7 +279,7 @@
       const res = await fetch(`/v1/chat/loadchat/${chatId}`);
       const data = await res.json();
 
-      (data.messages || []).forEach(msg => {
+      (data || []).forEach(msg => {
         renderMarkdownBubble(
           msg.role === "user" ? msg.content : "**Bot:** " + msg.content,
           msg.role === "user"
