@@ -33,3 +33,14 @@ class ChatSession(db.Model):
     title = db.Column(db.String(100), default='Untitled Chat')
     created_at = db.Column(db.DateTime, default=datetime.now())
     client_name = db.Column(db.String(100), nullable=True)  # Simple client name for now, can be extended later into a full Client model if needed
+    
+class ChatMessage(db.Model):
+    __tablename__ = 'chat_messages'
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.String(36), db.ForeignKey('chat_sessions.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    sender = db.Column(db.String(10), nullable=False)  
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    session = db.relationship('ChatSession', backref=db.backref('messages', lazy=True))
