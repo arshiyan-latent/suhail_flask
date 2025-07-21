@@ -55,7 +55,15 @@ def get_clients_for_user(user_id):
 @login_required
 def home():
     clients = get_clients_for_user(current_user.id)
-    return render_template('chat.html', username=current_user.username, role=current_user.role,user_id = current_user.id, clients=clients)
+    recent_chats = (
+    db.session.query(ChatSession.id, ChatSession.title)
+    .join(ChatMessage, ChatSession.id == ChatMessage.session_id)
+    .filter(ChatSession.user_id == current_user.id)
+    .group_by(ChatSession.id)
+    .order_by(db.func.max(ChatMessage.timestamp).desc())
+    .all()
+    )
+    return render_template('chat.html', username=current_user.username, role=current_user.role,user_id = current_user.id, clients=clients, recent_chats=recent_chats)
 
 @app.route('/admin')
 @role_required('admin')
@@ -278,24 +286,20 @@ def get_user_chats():
 @app.route('/v1/chat/loadchat/<chat_id>', methods=['GET'])
 @login_required
 def load_chat(chat_id):
-    # Ensure this chat belongs to the user
     session = ChatSession.query.filter_by(id=chat_id, user_id=current_user.id).first()
     if not session:
         return jsonify({'error': 'Chat session not found'}), 404
 
-    messages = ChatMessage.query.filter_by(
-        session_id=chat_id
-    ).order_by(ChatMessage.timestamp).all()
-
+    messages = ChatMessage.query.filter_by(session_id=chat_id).order_by(ChatMessage.timestamp).all()
+    
     return jsonify([
         {
             'content': m.message,
-            'role': m.sender,  # either 'user' or 'bot'
+            'role': 'user' if m.sender == 'user' else 'bot',
             'timestamp': m.timestamp.isoformat()
         }
         for m in messages
     ])
-
 
 if __name__ == '__main__':
     with app.app_context():

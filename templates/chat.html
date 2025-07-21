@@ -71,9 +71,11 @@
       <h3 class="text-xs font-semibold text-white/70 mb-2">Recent Chats</h3>
       <ul id="recentChats" class="space-y-1">
         {% for chat in recent_chats %}
-          <li class="p-2 rounded bg-white/10 hover:bg-white/20 cursor-pointer truncate">
-            {{ chat.title }}
-          </li>
+          <button 
+            onclick="loadChatById('{{ chat.id }}')" 
+            class="w-full bg-white/10 text-white text-left px-4 py-2 rounded-lg hover:bg-white/20 transition">
+            {{ chat.title or 'Untitled' }}
+        </button>
         {% else %}
           <li class="text-white/50 italic">No recent chats</li>
         {% endfor %}
@@ -270,6 +272,10 @@
 
   //WILL NEED UPDATE
   async function loadChatById(chatId) {
+    if (!chatId) {
+      console.error("Chat ID is undefined. Skipping load.");
+      return;
+    }
     currentChatId = chatId;
     chatCreated = true;
     chatWindow.innerHTML = '';
@@ -277,9 +283,11 @@
 
     try {
       const res = await fetch(`/v1/chat/loadchat/${chatId}`);
-      const data = await res.json();
+      if (!res.ok) throw new Error('Failed to load chat');
 
-      (data || []).forEach(msg => {
+      const messages = await res.json();
+
+      messages.forEach(msg => {
         renderMarkdownBubble(
           msg.role === "user" ? msg.content : "**Bot:** " + msg.content,
           msg.role === "user"
@@ -290,7 +298,7 @@
     } catch (err) {
       renderMarkdownBubble("**Error:** Couldn't load chat history.", "max-w-xs bg-red-600 px-4 py-2 rounded-xl self-start");
     }
-  }
+}
 
   // + New Chat button click
   document.getElementById('newChatBtn')?.addEventListener('click', async () => {
