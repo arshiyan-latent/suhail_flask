@@ -58,7 +58,10 @@ def home():
     recent_chats = (
     db.session.query(ChatSession.id, ChatSession.title)
     .join(ChatMessage, ChatSession.id == ChatMessage.session_id)
-    .filter(ChatSession.user_id == current_user.id)
+    .filter(
+        ChatSession.user_id == current_user.id,
+        ChatSession.client_name.is_(None)  # Only include general chats, not client chats
+    )
     .group_by(ChatSession.id)
     .order_by(db.func.max(ChatMessage.timestamp).desc())
     .all()
@@ -319,6 +322,29 @@ def rename_chat():
     print("Rename request received:", data)
     print("Chat found:", chat is not None)
 
+
+@app.route('/v1/chat/deletechat', methods=['POST'])
+@login_required
+def delete_chat():
+    data = request.get_json()
+    chat_id = data.get('chat_id')
+    
+    if not chat_id:
+        return jsonify({'error': 'Chat ID is required'}), 400
+    
+    # Find the chat session
+    chat = ChatSession.query.filter_by(id=chat_id, user_id=current_user.id).first()
+    if not chat:
+        return jsonify({'error': 'Chat not found'}), 404
+    
+    # Delete all messages for this chat
+    ChatMessage.query.filter_by(session_id=chat_id).delete()
+    
+    # Delete the chat session
+    db.session.delete(chat)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': 'Chat deleted successfully'})
 
 if __name__ == '__main__':
     with app.app_context():
