@@ -203,27 +203,62 @@
   };
 
   async function createNewChatAndAssign(clientName = null) {
-    const requestBody = {user_id: user_id};
+    const requestBody = { user_id: user_id };
     if (clientName) {
       requestBody.client_name = clientName;
     }
 
-    const res = await fetch('/v1/chat/newchat', { 
+    const res = await fetch('/v1/chat/newchat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody)
     });
+
     const data = await res.json();
     currentChatId = data.id;
     currentClientName = clientName;
     chatCreated = true;
 
+    // Create chat list item container
     const li = document.createElement('li');
-    li.className = "p-2 rounded bg-white/10 hover:bg-white/20 cursor-pointer truncate";
-    li.textContent = clientName ? `Chat with ${clientName}` : 'General Chat';
+    li.className = "w-full flex justify-between items-center text-left bg-white/10 rounded-md px-4 py-2 mt-2";
     li.dataset.chatId = data.id;
-    li.addEventListener('click', () => loadChatById(data.id));
+
+    // Chat title span
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = clientName ? `Chat with ${clientName}` : 'Untitled';
+    titleSpan.className = "truncate flex-grow";
+    titleSpan.addEventListener('click', () => loadChatById(data.id));
+
+    // Rename icon
+    const renameIcon = document.createElement('span');
+    renameIcon.innerHTML = '✏️';
+    renameIcon.className = "ml-2 flex-shrink-0 text-yellow-400 hover:text-yellow-300 cursor-pointer text-sm";
+    renameIcon.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      const newTitle = prompt('Enter new title:');
+      if (newTitle) {
+        const renameRes = await fetch('/v1/chat/renamechat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: data.id, new_title: newTitle })
+        });
+
+        if (renameRes.ok) {
+          titleSpan.textContent = newTitle;
+        } else {
+          alert('Rename failed');
+        }
+      }
+    });
+
+    // Append children and insert
+    li.appendChild(titleSpan);
+    li.appendChild(renameIcon);
     recentChats.prepend(li);
+
+    // Immediately highlight this new chat
+    loadChatById(data.id);
   }
 
   // Auto-create chat ID on first typing if needed
@@ -301,7 +336,10 @@
     } catch (err) {
       renderMarkdownBubble("**Error:** Couldn't load chat history.", "max-w-xs bg-red-600 px-4 py-2 rounded-xl self-start");
     }
-}
+    const activeChat = document.querySelector(`#recentChats li[data-chat-id="${chatId}"]`);
+    highlightSelectedChat(activeChat);
+    currentChatId = chatId;
+  }
 
   // + New Chat button click
   document.getElementById('newChatBtn')?.addEventListener('click', async () => {
@@ -340,6 +378,18 @@
     if (selectedElement) {
       selectedElement.classList.remove('bg-white/10');
       selectedElement.classList.add('bg-blue-500/30', 'border', 'border-blue-400');
+    }
+  }
+
+  function highlightSelectedChat(selectedElement) {
+    document.querySelectorAll('#recentChats li').forEach(item => {
+      item.classList.remove('bg-purple-600', 'text-white');
+      item.classList.add('bg-white/10');
+    });
+
+    if (selectedElement) {
+      selectedElement.classList.remove('bg-white/10');
+      selectedElement.classList.add('bg-purple-600', 'text-white');
     }
   }
 

@@ -315,7 +315,10 @@ def rename_chat():
 
     chat.title = new_title
     db.session.commit()
-    return jsonify({'message': 'Title updated successfully'})
+    return jsonify({'success': True})
+    print("Rename request received:", data)
+    print("Chat found:", chat is not None)
+
 
 if __name__ == '__main__':
     with app.app_context():
