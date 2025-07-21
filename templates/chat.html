@@ -71,11 +71,14 @@
       <h3 class="text-xs font-semibold text-white/70 mb-2">Recent Chats</h3>
       <ul id="recentChats" class="space-y-1">
         {% for chat in recent_chats %}
-          <button 
-            onclick="loadChatById('{{ chat.id }}')" 
-            class="w-full bg-white/10 text-white text-left px-4 py-2 rounded-lg hover:bg-white/20 transition">
-            {{ chat.title or 'Untitled' }}
-        </button>
+          <button onclick="loadChatById('{{ chat.id }}')"
+            class="w-full flex justify-between items-center text-left bg-white/10 rounded-md px-4 py-2 mt-2">
+            <span>{{ chat.title }}</span>
+            <span onclick="event.stopPropagation(); renameChat('{{ chat.id }}')"
+                  class="text-yellow-400 hover:text-yellow-300 cursor-pointer ml-2 text-sm">
+              ✏️
+            </span>
+          </button>
         {% else %}
           <li class="text-white/50 italic">No recent chats</li>
         {% endfor %}
@@ -204,7 +207,7 @@
     if (clientName) {
       requestBody.client_name = clientName;
     }
-    
+
     const res = await fetch('/v1/chat/newchat', { 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -540,6 +543,31 @@
       alert('Failed to rename client: ' + error.message);
     }
   });
+  async function renameChat(chatId) {
+  const newTitle = prompt("Enter new chat title:");
+  if (!newTitle) return;
+
+  const res = await fetch('/v1/chat/renamechat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      chat_id: chatId,
+      new_title: newTitle
+    })
+  });
+
+  const data = await res.json();
+
+  if (res.ok) {
+    alert("Chat renamed!");
+    location.reload(); // refresh to update sidebar titles
+  } else {
+    alert("Error renaming chat: " + (data.error || "Unknown error"));
+  }
+}
+
 </script>
 
 

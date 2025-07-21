@@ -184,13 +184,14 @@ def sales_agent():
 def new_chat_id():
     user_id = int(request.json['user_id'])
     client_name = request.json.get('client_name')  # Optional client name
+    title = request.json.get('title', 'Untitled Chat')  # Default title if not provided
     chat_id = uuid.uuid4()
     
-    new_chat = ChatSession(id=str(chat_id), user_id=current_user.id, title = "Untitled", client_name=client_name)
+    new_chat = ChatSession(id=str(chat_id), user_id=current_user.id, title = title, client_name=client_name)
     db.session.add(new_chat)
     db.session.commit()
 
-    return jsonify({'id': chat_id})
+    return jsonify({'id': chat_id, 'title': title})
 
 # Create client endpoint
 @app.route('/v1/clients', methods=['POST'])
@@ -300,6 +301,21 @@ def load_chat(chat_id):
         }
         for m in messages
     ])
+
+@app.route('/v1/chat/renamechat', methods=['POST'])
+@login_required
+def rename_chat():
+    data = request.get_json()
+    chat_id = data.get('chat_id')
+    new_title = data.get('new_title')
+
+    chat = ChatSession.query.filter_by(id=chat_id, user_id=current_user.id).first()
+    if not chat:
+        return jsonify({'error': 'Chat not found'}), 404
+
+    chat.title = new_title
+    db.session.commit()
+    return jsonify({'message': 'Title updated successfully'})
 
 if __name__ == '__main__':
     with app.app_context():
