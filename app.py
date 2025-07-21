@@ -1,8 +1,11 @@
 # app.py
 from webbrowser import get
-from agents.agent import supervisor_agent
+from agents.agent import supervisor_agent, llm
+from agents.summary.summary_agent import extract_transcript, generate_summary
 from dotenv import load_dotenv
 import os
+from langchain_openai import ChatOpenAI
+
 
 load_dotenv()
 
@@ -345,6 +348,39 @@ def delete_chat():
     db.session.commit()
     
     return jsonify({'success': True, 'message': 'Chat deleted successfully'})
+
+@app.route('/v1/chat/summary', methods=['POST'])
+@login_required
+def get_chat_summary():
+    data = request.get_json()
+    chat_id = data.get('chat_id')
+    
+    if not chat_id:
+        return jsonify({'error': 'Chat ID is required'}), 400
+    
+    # Verify the chat belongs to the current user
+    chat = ChatSession.query.filter_by(id=chat_id, user_id=current_user.id).first()
+    if not chat:
+        return jsonify({'error': 'Chat not found'}), 404
+    
+    try:
+        # Get all messages for this chat
+        messages = ChatMessage.query.filter_by(session_id=chat_id).order_by(ChatMessage.timestamp).all()
+        
+        if not messages:
+            return jsonify({'error': 'No messages found in this chat'}), 404
+        
+        # Extract transcript
+        transcript = extract_transcript(messages)
+
+        # Generate summary using the LLM directly
+        summary = generate_summary(transcript)
+        
+        return jsonify({'summary': summary, 'success': True})
+        
+    except Exception as e:
+        print(f"Error generating summary: {e}")
+        return jsonify({'error': 'Failed to generate summary'}), 500
 
 if __name__ == '__main__':
     with app.app_context():
