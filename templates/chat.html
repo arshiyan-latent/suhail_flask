@@ -27,7 +27,7 @@
 </style>
 
   <!-- Sidebar -->
-  <aside class="w-full md:w-72 backdrop-blur-md bg-white/10 border-b md:border-b-0 md:border-r border-white/20 p-4 flex flex-col space-y-4 text-sm fixed left-0 top-0 h-screen z-40 overflow-y-auto">
+  <aside id="sidebar" class="w-full md:w-72 backdrop-blur-md bg-white/10 border-b md:border-b-0 md:border-r border-white/20 p-4 flex flex-col space-y-4 text-sm fixed left-0 top-0 h-screen z-40 overflow-y-auto transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out">
     <div class="text-lg font-semibold text-white/90">Suhail</div>
 
     <!-- New Chat Button -->
@@ -119,6 +119,13 @@
 
     <!-- Navbar -->
     <nav class="flex justify-between items-center px-4 py-3 backdrop-blur-md bg-white/10 border-b border-white/20 fixed top-0 left-0 right-0 z-50" style="height:56px;">
+      <!-- Mobile Menu Button -->
+      <button id="mobileMenuBtn" class="md:hidden w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 cursor-pointer">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+      </button>
+      
       <div class="text-lg font-medium truncate">Suhail</div>
       <div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 cursor-pointer">
         <a href="/logout"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -181,6 +188,9 @@
       </button>
     </form>
   </div>
+
+  <!-- Mobile Overlay -->
+  <div id="mobileOverlay" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden"></div>
 
     <!-- Add Client Modal -->
   <div id="addClientModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -247,6 +257,39 @@
 
   <!-- JavaScript -->
   <script>
+  // Mobile menu functionality
+  const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+  const sidebar = document.getElementById('sidebar');
+  const mobileOverlay = document.getElementById('mobileOverlay');
+
+  function toggleMobileMenu() {
+    const isOpen = !sidebar.classList.contains('-translate-x-full');
+    
+    if (isOpen) {
+      // Close sidebar
+      sidebar.classList.add('-translate-x-full');
+      mobileOverlay.classList.add('hidden');
+    } else {
+      // Open sidebar
+      sidebar.classList.remove('-translate-x-full');
+      mobileOverlay.classList.remove('hidden');
+    }
+  }
+
+  // Mobile menu button click
+  mobileMenuBtn?.addEventListener('click', toggleMobileMenu);
+
+  // Overlay click to close
+  mobileOverlay?.addEventListener('click', toggleMobileMenu);
+
+  // Close sidebar when clicking on chat items (mobile only)
+  const closeSidebarOnMobile = () => {
+    if (window.innerWidth < 768) {
+      sidebar.classList.add('-translate-x-full');
+      mobileOverlay.classList.add('hidden');
+    }
+  };
+
   // Delete chat function
   async function deleteChat(chatId) {
     if (!confirm('Are you sure you want to delete this chat? This action cannot be undone.')) return;
@@ -434,6 +477,8 @@
     await createNewChatAndAssign();
     chatWindow.innerHTML = '';
     input.value = '';
+    // Close sidebar on mobile
+    closeSidebarOnMobile();
   });
 
   // Attach listener to server-rendered chat list
@@ -445,6 +490,8 @@
       highlightSelectedClient(null);
       const chatId = li.dataset.chatId;
       loadChatById(chatId);
+      // Close sidebar on mobile
+      closeSidebarOnMobile();
     });
   });
 
@@ -503,12 +550,16 @@
           chatWindow.innerHTML = '';
           input.value = '';
         }
+        // Close sidebar on mobile
+        closeSidebarOnMobile();
       } catch (error) {
         console.error('Error finding client chat:', error);
         // Fallback to creating new chat
         await createNewChatAndAssign(clientName);
         chatWindow.innerHTML = '';
         input.value = '';
+        // Close sidebar on mobile
+        closeSidebarOnMobile();
       }
     });
 
