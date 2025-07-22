@@ -28,7 +28,7 @@ login_manager.login_view = 'login'
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 # Role-based access control decorator
 def role_required(role):
@@ -132,7 +132,7 @@ def manage_users():
                 db.session.commit()
         elif action == 'update':
             user_id = request.form['user_id']
-            user = User.query.get(user_id)
+            user = db.session.get(User, user_id)
             if user:
                 user.role = request.form['role']
                 if request.form['password']:
@@ -140,7 +140,7 @@ def manage_users():
                 db.session.commit()
         elif action == 'delete':
             user_id = request.form['user_id']
-            user = User.query.get(user_id)
+            user = db.session.get(User, user_id)
             if user and user.username != 'admin':  # don't delete default admin
                 db.session.delete(user)
                 db.session.commit()
@@ -384,5 +384,16 @@ def get_chat_summary():
 
 if __name__ == '__main__':
     with app.app_context():
+        # Check if we need to add manager_id column
+        inspector = db.inspect(db.engine)
+        existing_columns = [column['name'] for column in inspector.get_columns('user')]
+        
+        if 'manager_id' not in existing_columns:
+            # Add the manager_id column to existing database
+            with db.engine.connect() as conn:
+                conn.execute(db.text("ALTER TABLE user ADD COLUMN manager_id INTEGER"))
+                conn.commit()
+                print("Added manager_id column to user table")
+        
         db.create_all()
     app.run(debug=True)
