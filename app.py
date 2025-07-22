@@ -99,7 +99,7 @@ def register():
             flash('Username already exists.')
             return redirect(url_for('register'))
 
-        new_user = User(username=username, role=role)
+        new_user = User(username=username, role=role, manager_id = str(uuid.uuid4()) if role =='manager' else None)
         new_user.set_password(password)
         db.session.add(new_user)
         db.session.commit()
