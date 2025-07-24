@@ -18,6 +18,12 @@ import uuid
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv("FLASK_SECRET_KEY")
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+
+#db_password = os.getenv('POSTGRE_PASSWORD')
+#DATABASE_URL=f'postgresql://postgres:{db_password}@db.gvuxfdhghxrxlyjnlfly.supabase.co:6543/postgres'
+#print(DATABASE_URL)
+#app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
@@ -168,7 +174,7 @@ def sales_agent():
     # Run the bot
     result = supervisor_agent.invoke({
         "messages": [{"role": "user", "content": user_message}]
-    }, config={"configurable": {"thread_id": chat_id}})
+    }, config={"configurable": {"thread_id": str(chat_id)}})
 
     ai_response = result['messages'][-1].content
 
@@ -208,7 +214,7 @@ def create_client():
         return jsonify({'error': 'Client name required'}), 400
     
     # This saves the client in the database for future reference
-    chat_id = uuid.uuid4()
+    chat_id = str(uuid.uuid4())
     new_chat = ChatSession(
         id=str(chat_id), 
         user_id=current_user.id, 
