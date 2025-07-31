@@ -24,6 +24,85 @@
   .main-chat-area {
     margin-top: 56px !important;
   }
+
+  /* Enhanced Table Styles */
+  .markdown table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 1rem 0;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .markdown th {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 600;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 0.875rem;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .markdown td {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.875rem;
+  }
+
+  .markdown tr:last-child td {
+    border-bottom: none;
+  }
+
+  .markdown tr:hover td {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  /* Status Indicators in Tables */
+  .markdown td:has(span:contains("✅")) {
+    color: #4ade80;
+  }
+
+  .markdown td:has(span:contains("❌")) {
+    color: #f87171;
+  }
+
+  .markdown td:has(span:contains("⚠️")) {
+    color: #fbbf24;
+  }
+
+  /* Section Headers in Agent Output */
+  .markdown h2, .markdown h3 {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 0.5rem;
+    margin: 1.5rem 0 1rem 0;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  /* Special Sections */
+  .markdown .benchmark-section,
+  .markdown .evaluation-section,
+  .markdown .forecast-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+  }
+
+  /* Add subtle animation to new messages */
+  .markdown {
+    opacity: 0;
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 </style>
 
   <!-- Sidebar -->
@@ -323,7 +402,16 @@
 
   const renderMarkdownBubble = (markdown, className) => {
     const bubble = document.createElement('div');
-    bubble.className = className;
+    bubble.className = `${className} markdown`;
+    
+    // Configure marked options for better table rendering
+    marked.setOptions({
+      gfm: true, // GitHub Flavored Markdown
+      breaks: true,
+      headerIds: false,
+      mangle: false
+    });
+    
     bubble.innerHTML = marked.parse(markdown);
     chatWindow.appendChild(bubble);
     chatWindow.scrollTop = chatWindow.scrollHeight;
@@ -414,7 +502,7 @@
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
       </svg>
-      <span class="text-white/70 text-xs">Bot is typing...</span>
+      <span class="text-white/70 text-xs"> Suhail is typing...</span>
     `;
     chatWindow.appendChild(typingBubble);
     chatWindow.scrollTop = chatWindow.scrollHeight;
@@ -428,6 +516,7 @@
 
       const data = await response.json();
       typingBubble.remove();
+      console.log('Raw agent response:', data); // Log the raw response
       renderMarkdownBubble(data || "No response", "w-full bg-white/10 px-4 py-2 rounded-xl self-start");
     } catch (error) {
       typingBubble.remove();
