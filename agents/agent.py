@@ -4,6 +4,7 @@ import sqlite3
 from langchain_openai import ChatOpenAI
 from langgraph_supervisor import create_supervisor
 from agents.package_detals.agent import agent_policy_package_details
+from agents.spreadsheet.spreadsheet_agent import agent_spreadsheet_data
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.postgres import PostgresSaver
 from psycopg import Connection
@@ -43,6 +44,40 @@ memory = SqliteSaver(conn)
 
 supervisor_prompt= '''
 First introduction message MUST be displayed in BOTH arabic and english, regardless of user input.
+
+You are a supervisory agent for Suhail Insurance with access to specialized agents and their tools:
+
+1. **Policy Package Details Agent**: Handles questions about insurance packages, coverage, benefits, and policy details
+   - Tool: get_policy_package_details - Provides detailed information about Basic, Bronze, Silver, Gold, and Diamond insurance packages
+
+2. **Spreadsheet Data Agent**: Handles ALL questions involving numbers, benchmarks, historical data, premiums, claims, loss ratios, regional comparisons, and any numerical analysis from the historical data in test_historical.xlsx
+   - Tool: assess_new_offer - Evaluates feasibility and likelihood of success for new insurance offers using historical benchmarks and sales logic
+
+**ROUTING RULES FOR NUMERICAL DATA:**
+- ANY question about cost per claim, Loss Ratio (LR), benchmarks, historical data, regional averages, premium calculations → Route to Spreadsheet Data Agent
+- Questions about "what's typical for [region/package]", "average claims", "benchmark data" → Route to Spreadsheet Data Agent  
+- Financial calculations, comparisons between regions/packages → Route to Spreadsheet Data Agent
+- Policy features, coverage details, benefits → Route to Policy Package Details Agent
+
+**MANDATORY DATA COLLECTION:**
+Before using ANY tools or making recommendations, you MUST collect these 6 required inputs with STRICT validation:
+
+1. **Contract Region** - ONLY accept: "Central", "Eastern", "Western", "Southern", or "Northern" (exact match, no variations)
+2. **Number of Lives** - ONLY accept positive integers (no "idk", "unknown", approximations)
+3. **Offered Budget per Life** - ONLY accept positive numbers in SAR (no "idk", "around", "approximately")
+4. **Target Loss Ratio** - ONLY accept decimal between 0.1-1.0 (e.g., 0.85 for 85%) (no "idk", "normal", "standard")
+5. **Package Offered** - ONLY accept: "Basic", "Bronze", "Silver", "Gold", or "Diamond" (exact match, no variations)
+6. **Historical Claims per Life** - Accept positive numbers in SAR OR only "I don't know" (no other variations like "idk", "unknown")
+
+❌ **VALIDATION RULES:**
+- Reject answers like "idk", "I'm not sure", "around X", "approximately", "normal", "standard"
+- For inputs 1-5: Keep asking until you get exact valid values
+- For input 6: Only accept numbers or exactly "I don't know"
+- Do not proceed until ALL 6 inputs have valid values
+
+❌ **DO NOT proceed with any analysis, tool usage, or recommendations until ALL 6 inputs are collected and validated.**
+✅ **Only after collecting all 6 VALID inputs, use the assess_new_offer tool to get benchmark data, then use that data to build comprehensive comparison tables and recommendations.**
+
 {
   "prompt": {
     "instructions": [
@@ -108,8 +143,8 @@ First introduction message MUST be displayed in BOTH arabic and english, regardl
     },
     "output_format": {
       "sections": [
-        "Benchmark Comparison Table",
-        "Side-by-side Comparison Table",
+        "Markdown Table: Benchmark Comparison Table",
+        "Markdown Table: Side-by-side Comparison Table",
         "How to pitch it"
       ],
       "comparison_table_columns": [
@@ -127,6 +162,23 @@ First introduction message MUST be displayed in BOTH arabic and english, regardl
 }
 
 '''
+
+
+
+supervisor = create_supervisor(
+    agents=[agent_policy_package_details(llm=llm), agent_spreadsheet_data(llm=llm)],
+    model=llm,
+    prompt=(
+        supervisor_prompt
+    ),
+    output_mode="last_message"
+)
+
+supervisor_agent = supervisor.compile(checkpointer=memory)
+
+
+
+
 
 # # prompt
 # supervisor_prompt='''**You are Suhail**, an AI-powered **Health Insurance Sales and Marketing Guidance Assistant**, purpose-built to support health insurance marketing and sales teams through every stage of the sales cycle—**before, during, and after client meetings**.
@@ -285,15 +337,3 @@ First introduction message MUST be displayed in BOTH arabic and english, regardl
 #                 * Clear about any assumptions, tool use, or gaps in information.
 #                 * Helpful for marketers looking to close or progress deals.
 #                 '''
-
-
-supervisor = create_supervisor(
-    agents=[agent_policy_package_details(llm=llm) ],
-    model=llm,
-    prompt=(
-        supervisor_prompt
-    ),
-    output_mode="last_message"
-)
-
-supervisor_agent = supervisor.compile(checkpointer=memory)
