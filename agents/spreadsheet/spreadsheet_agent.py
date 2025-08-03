@@ -8,7 +8,8 @@ import os
 def load_historical_data():
     """Load the historical data with proper error handling"""
     try:
-        file_path = os.path.join('static', 'test_historical.xlsx')
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(base_dir, 'sheets', 'test_historical.xlsx')
         if os.path.exists(file_path):
             return pd.read_excel(file_path)
         else:

@@ -4,7 +4,11 @@ from agents.agent import supervisor_agent, llm
 from agents.summary.summary_agent import extract_transcript, generate_summary
 from dotenv import load_dotenv
 import os
+# import logging
 from langchain_openai import ChatOpenAI
+
+# Set logging level to suppress langgraph debug messages
+# logging.getLogger('langgraph').setLevel(logging.ERROR)
 
 
 load_dotenv()
@@ -402,4 +406,4 @@ if __name__ == '__main__':
                 print("Added manager_id column to user table")
         
         db.create_all()
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000,debug=True)
