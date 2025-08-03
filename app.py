@@ -4,7 +4,11 @@ from agents.agent import supervisor_agent, llm
 from agents.summary.summary_agent import extract_transcript, generate_summary
 from dotenv import load_dotenv
 import os
+# import logging
 from langchain_openai import ChatOpenAI
+
+# Set logging level to suppress langgraph debug messages
+# logging.getLogger('langgraph').setLevel(logging.ERROR)
 
 
 load_dotenv()
