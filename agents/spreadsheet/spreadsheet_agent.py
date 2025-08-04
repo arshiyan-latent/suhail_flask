@@ -8,8 +8,11 @@ import os
 def load_historical_data():
     """Load the historical data with proper error handling"""
     try:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(base_dir, 'sheets', 'test_historical.xlsx')
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))  # Go up 3 levels from spreadsheet/
+        file_path = os.path.join(project_root, 'agents', 'spreadsheet', 'sheets', 'test_historical.xlsx')
+
+        print(f"Resolved path: {file_path}")
+
         if os.path.exists(file_path):
             return pd.read_excel(file_path)
         else:
