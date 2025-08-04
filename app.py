@@ -169,8 +169,14 @@ def sales_agent():
     )
     db.session.add(user_msg)
 
-    # Run the bot
-    result = supervisor_agent.invoke({
+    # Select agent based on user role
+    if current_user.role == 'manager':
+        from agents.manager_agent import manager_agent as active_agent
+    else:
+        from agents.agent import supervisor_agent as active_agent
+
+    # Run the appropriate agent
+    result = active_agent.invoke({
         "messages": [{"role": "user", "content": user_message}]
     }, config={"configurable": {"thread_id": chat_id}})
 
