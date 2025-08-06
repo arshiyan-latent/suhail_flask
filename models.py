@@ -45,3 +45,36 @@ class ChatMessage(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
     session = db.relationship('ChatSession', backref=db.backref('messages', lazy=True))
+
+class ClientSummary(db.Model):
+    __tablename__ = 'client_summaries'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    client_name = db.Column(db.String(100), nullable=False)
+    summary = db.Column(db.Text, nullable=False)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow)
+    message_count = db.Column(db.Integer, default=0)  # Track number of messages since last summary
+    
+    user = db.relationship('User', backref=db.backref('client_summaries', lazy=True))
+
+class TeamNotification(db.Model):
+    __tablename__ = 'team_notifications'
+    id = db.Column(db.Integer, primary_key=True)
+    manager_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)
+    priority = db.Column(db.String(20), default='normal')  # 'urgent', 'normal', 'low'
+
+    # Manager relationship
+    manager = db.relationship('User', backref=db.backref('notifications_sent', lazy=True))
+
+class NotificationRead(db.Model):
+    __tablename__ = 'notification_reads'
+    id = db.Column(db.Integer, primary_key=True)
+    notification_id = db.Column(db.Integer, db.ForeignKey('team_notifications.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    read_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    notification = db.relationship('TeamNotification')
+    user = db.relationship('User', backref=db.backref('notification_reads', lazy=True))
