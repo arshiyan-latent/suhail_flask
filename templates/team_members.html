@@ -1,0 +1,66 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Members - Suhail</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        async function viewAgentSummary(agentId, agentName) {
+            try {
+                const response = await fetch(`/manager/agent-summary/${agentId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    // Redirect to the chat page with the new chat
+                    window.location.href = `/?chat_id=${data.chat_id}`;
+                } else {
+                    alert('Error creating summary chat');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error creating summary chat');
+            }
+        }
+    </script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 text-white">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-2xl font-bold">Team Members</h1>
+            <div class="space-x-4">
+                <a href="/manager/dashboard" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Dashboard</a>
+                <a href="/" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Back to Chat</a>
+                <a href="/logout" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Logout</a>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for member in team_members %}
+            <div class="bg-white/10 rounded-xl p-6 backdrop-blur-md">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="text-lg font-semibold">{{ member.username }}</h3>
+                        <p class="text-sm text-white/70">Sales Agent</p>
+                    </div>
+                    <button 
+                        onclick="viewAgentSummary('{{ member.id }}', '{{ member.username }}')"
+                        class="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg backdrop-blur-md transition-all flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        <span>View Summary</span>
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html> -->

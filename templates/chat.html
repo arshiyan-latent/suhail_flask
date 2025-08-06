@@ -123,7 +123,9 @@
           <li class="p-2 rounded bg-white/10 hover:bg-white/20 cursor-pointer"><a href="/admin/users">Admin Dashboard</a></li>
           <li class="p-2 rounded bg-white/10 hover:bg-white/20 cursor-pointer">Manager's Dashboard</li>
         {% elif current_user.role == 'manager' %}
-        <li class="p-2 rounded bg-white/10 hover:bg-white/20 cursor-pointer">Manager's Dashboard</li>
+        <li class="p-2 rounded bg-white/10 hover:bg-white/20 cursor-pointer">
+            <a href="/manager/dashboard">Manager's Dashboard</a>
+        </li>
 
         {% endif %}
         <!-- <li class="p-2 rounded bg-white/10 hover:bg-white/20 cursor-pointer">General Chat</li>
@@ -131,7 +133,8 @@
       </ul>
     </div>
 
-    <!-- Clients -->
+    <!-- Clients - Only show for non-manager users -->
+    {% if current_user.role != 'manager' %}
     <div>
       <div class="flex items-center justify-between mb-2">
         <h3 class="text-xs font-semibold text-white/70">Clients</h3>
@@ -161,6 +164,7 @@
         {% endfor %}
       </ul>
     </div>
+    {% endif %}
 
     <!-- Recent Chats -->
     <div class="flex-1 overflow-y-auto mt-2">
@@ -206,11 +210,38 @@
       </button>
       
       <div class="text-lg font-medium truncate">Suhail</div>
-      <div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 cursor-pointer">
-        <a href="/logout"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M5.121 17.804A9.953 9.953 0 0112 15c2.21 0 4.245.715 5.879 1.92M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-        </svg></a>
+      <div class="flex items-center space-x-4">
+        {% if current_user.role == 'salesagent' %}
+        {% include 'components/notification_button.html' %}
+        {% endif %}
+        {% if current_user.role == 'manager' %}
+        <div class="relative" id="teamMembersDropdown">
+          <button class="px-3 py-1 bg-white/20 rounded-lg text-white hover:bg-white/30 transition-all text-sm flex items-center space-x-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+            </svg>
+            <span>Team Members</span>
+          </button>
+          <div class="hidden absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-lg border border-white/20 z-50" id="teamMembersList">
+            {% if sales_agents %}
+              {% for agent in sales_agents %}
+                <div class="px-4 py-2 text-white hover:bg-white/10 cursor-pointer transition-all"
+                     onclick="createAgentSummaryChat('{{ agent.id }}', '{{ agent.username }}')">
+                  {{ agent.username }} - Sales Agent
+                </div>
+              {% endfor %}
+            {% else %}
+              <div class="px-4 py-2 text-white/50 italic">No sales agents found</div>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+        <div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white hover:bg-white/30 cursor-pointer">
+          <a href="/logout"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M5.121 17.804A9.953 9.953 0 0112 15c2.21 0 4.245.715 5.879 1.92M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg></a>
+        </div>
       </div>
     </nav>
 
@@ -508,7 +539,7 @@
     chatWindow.scrollTop = chatWindow.scrollHeight;
 
     try {
-      const response = await fetch('/v1/chat/salesrep', {
+      const response = await fetch('/v1/chat/agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: message, chat_id: currentChatId })
@@ -911,6 +942,51 @@
     }
   }
 
+  // Team Members Dropdown functionality
+  const teamMembersBtn = document.querySelector('#teamMembersDropdown button');
+  const teamMembersList = document.getElementById('teamMembersList');
+
+  async function createAgentSummaryChat(agentId, agentName) {
+    try {
+      // Call the agent-summary endpoint
+      const response = await fetch(`/manager/agent-summary/${agentId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        // Load the chat (whether new or existing)
+        await loadChatById(data.chat_id);
+        // Close the dropdown
+        teamMembersList.classList.add('hidden');
+        // Close sidebar on mobile
+        closeSidebarOnMobile();
+      } else {
+        throw new Error('Failed to create/update summary chat');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error managing summary chat');
+    }
+  }
+
+  if (teamMembersBtn && teamMembersList) {
+    // Toggle dropdown
+    teamMembersBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      teamMembersList.classList.toggle('hidden');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!teamMembersBtn.contains(e.target) && !teamMembersList.contains(e.target)) {
+        teamMembersList.classList.add('hidden');
+      }
+    });
+  }
 </script>
 
 </body>

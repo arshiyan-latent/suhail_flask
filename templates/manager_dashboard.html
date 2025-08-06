@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manager Dashboard - Suhail</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+<body class="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 text-white">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-2xl font-bold">Manager Dashboard</h1>
+            <div class="space-x-4">
+                <a href="/" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Back to Chat</a>
+                <a href="/logout" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Logout</a>
+            </div>
+        </div>
+        
+        <!-- Dashboard Summary Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Total Sellers Card -->
+            <div class="bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-xl p-6 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-sm font-medium mb-2">Total Sellers</div>
+                    <div class="text-3xl font-bold">{{ dashboard_summary.total_sellers }}</div>
+                    <div class="mt-2 text-xs text-white/50">Active Sales Agents</div>
+                </div>
+            </div>
+
+            <!-- Total Accounts Card -->
+            <div class="bg-gradient-to-br from-purple-500/20 to-purple-600/20 rounded-xl p-6 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-sm font-medium mb-2">Total Accounts Managed</div>
+                    <div class="text-3xl font-bold">{{ dashboard_summary.total_accounts }}</div>
+                    <div class="mt-2 text-xs text-white/50">Active Client Accounts</div>
+                </div>
+            </div>
+
+            <!-- Total Business Card -->
+            <div class="bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 rounded-xl p-6 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-sm font-medium mb-2">Total Business in Hand</div>
+                    <div class="text-3xl font-bold">{{ "{:,.0f}".format(dashboard_summary.total_business) }} SAR</div>
+                    <div class="mt-2 text-xs text-white/50">Current Portfolio Value</div>
+                </div>
+            </div>
+
+            <!-- Target Achievement Card -->
+            <div class="bg-gradient-to-br from-amber-500/20 to-amber-600/20 rounded-xl p-6 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-sm font-medium mb-2">Target Achievement</div>
+                    <div class="text-3xl font-bold">{{ "%.1f"|format(dashboard_summary.target_achievement) }}%</div>
+                    <div class="mt-2 text-xs text-white/50">Of Annual Target</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Seller Productivity Table -->
+        <div class="bg-white/10 rounded-xl p-4 backdrop-blur-md mb-8">
+            <h2 class="text-lg font-semibold mb-3">Seller Productivity</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left border-b border-white/10">
+                            <th class="py-2 px-3 font-semibold">Seller Name</th>
+                            <th class="py-2 px-3 font-semibold">Assigned</th>
+                            <th class="py-2 px-3 font-semibold">Closed</th>
+                            <th class="py-2 px-3 font-semibold">Quota</th>
+                            <th class="py-2 px-3 font-semibold">Risk</th>
+                            <th class="py-2 px-3 font-semibold">Potential</th>
+                            <th class="py-2 px-3 font-semibold">AI Insight</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for seller in productivity_data %}
+                        <tr class="border-b border-white/5 hover:bg-white/5">
+                            <td class="py-2 px-3">{{ seller.seller_name }}</td>
+                            <td class="py-2 px-3">{{ seller.accounts_assigned }}</td>
+                            <td class="py-2 px-3">{{ seller.accounts_closed }}</td>
+                            <td class="py-2 px-3">{{ "%.1f"|format(seller.quota_achievement) }}%</td>
+                            <td class="py-2 px-3">
+                                <span class="px-2 py-0.5 rounded-full text-xs 
+                                    {% if seller.risk_level == 'Low' %}
+                                        bg-green-500/20 text-green-200
+                                    {% elif seller.risk_level == 'Medium' %}
+                                        bg-yellow-500/20 text-yellow-200
+                                    {% else %}
+                                        bg-red-500/20 text-red-200
+                                    {% endif %}">
+                                    {{ seller.risk_level }}
+                                </span>
+                            </td>
+                            <td class="py-2 px-3">{{ "{:,.0f}".format(seller.potential_close) }} SAR</td>
+                            <td class="py-2 px-3 text-white/70">{{ seller.ai_recommendation }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Top Stats Row -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <!-- End of Year Prediction Card -->
+            <div class="bg-gradient-to-br from-violet-500/20 to-violet-600/20 rounded-xl p-4 backdrop-blur-md">
+                <h3 class="text-base font-semibold mb-2">End of Year Predictions</h3>
+                <div class="text-2xl font-bold">{{ "{:,.0f}".format(predictions_data.year_end_prediction) }} SAR</div>
+                <div class="text-sm text-white/70">Projected Closure</div>
+            </div>
+
+            <!-- At Risk Deals Card -->
+            <div class="bg-gradient-to-br from-rose-500/20 to-rose-600/20 rounded-xl p-4 backdrop-blur-md">
+                <h3 class="text-base font-semibold mb-2">At Risk Deals</h3>
+                {% set at_risk_total = namespace(value=0) %}
+                {% for deal in predictions_data.at_risk_deals %}
+                    {% set at_risk_total.value = at_risk_total.value + deal['value'] %}
+                {% endfor %}
+                <div class="text-2xl font-bold">{{ "{:,.0f}".format(at_risk_total.value) }} SAR</div>
+                <div class="text-sm text-white/70">{{ predictions_data.at_risk_deals|length }} Deals at Risk</div>
+            </div>
+
+            <!-- Top Opportunities Card -->
+            <div class="bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 rounded-xl p-4 backdrop-blur-md">
+                <h3 class="text-base font-semibold mb-2">Top Opportunities</h3>
+                {% set opp_total = namespace(value=0) %}
+                {% for opp in predictions_data.top_opportunities %}
+                    {% set opp_total.value = opp_total.value + opp['potential'] %}
+                {% endfor %}
+                <div class="text-2xl font-bold">{{ "{:,.0f}".format(opp_total.value) }} SAR</div>
+                <div class="text-sm text-white/70">{{ predictions_data.top_opportunities|length }} High-Value Prospects</div>
+            </div>
+        </div>
+
+        <!-- Team Message Modal -->
+        <div id="teamMessageModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+            <div class="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 border border-white/20">
+                <h3 class="text-lg font-semibold text-white mb-4">Send Team Message</h3>
+                <form id="teamMessageForm">
+                    <div class="mb-4">
+                        <label class="block text-sm text-white/70 mb-2">Message</label>
+                        <textarea 
+                            id="messageInput" 
+                            class="w-full p-3 rounded-lg bg-white/10 border border-white/20 placeholder-white/50 text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                            rows="4"
+                            placeholder="Enter your message to the team..."
+                            required
+                        ></textarea>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm text-white/70 mb-2">Priority</label>
+                        <select 
+                            id="priorityInput"
+                            class="w-full p-3 rounded-lg bg-white/10 border border-white/20 text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                        >
+                            <option value="normal">Normal</option>
+                            <option value="urgent">Urgent</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+                    <div class="flex space-x-3">
+                        <button 
+                            type="submit" 
+                            class="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white py-2 px-4 rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all"
+                        >
+                            Send Message
+                        </button>
+                        <button 
+                            type="button"
+                            id="cancelTeamMessage"
+                            class="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-all"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-wrap gap-4 justify-center mt-8">
+            <button id="pushTeamMessageBtn" class="flex items-center gap-2 px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg backdrop-blur-md transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4z"></path>
+                </svg>
+                <span>Push Team Message</span>
+            </button>
+            
+            <button class="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg backdrop-blur-md transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                </svg>
+                <span>Assign Coach Task</span>
+            </button>
+            
+            <button class="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 rounded-lg backdrop-blur-md transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span>Adjust Pricing Strategy</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Agent Summary functionality
+        async function viewAgentSummary(agentId, agentName) {
+            try {
+                const response = await fetch(`/manager/agent-summary/${agentId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    // Redirect to the chat page with the new chat
+                    window.location.href = `/?chat_id=${data.chat_id}`;
+                } else {
+                    alert('Error creating summary chat');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error creating summary chat');
+            }
+        }
+
+        // Wait for DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            // Team Message Modal Functionality
+            const teamMessageModal = document.getElementById('teamMessageModal');
+            const pushTeamMessageBtn = document.getElementById('pushTeamMessageBtn');
+            const cancelTeamMessageBtn = document.getElementById('cancelTeamMessage');
+            const teamMessageForm = document.getElementById('teamMessageForm');
+
+            if (teamMessageModal && pushTeamMessageBtn && cancelTeamMessageBtn && teamMessageForm) {
+                // Show modal
+                pushTeamMessageBtn.addEventListener('click', () => {
+                    console.log('Push team message button clicked'); // Debug log
+                    teamMessageModal.classList.remove('hidden');
+                    teamMessageModal.classList.add('flex');
+                    document.getElementById('messageInput').focus();
+                });
+
+                // Hide modal
+                function hideModal() {
+                    teamMessageModal.classList.add('hidden');
+                    teamMessageModal.classList.remove('flex');
+                    teamMessageForm.reset();
+                }
+
+                cancelTeamMessageBtn.addEventListener('click', () => {
+                    console.log('Cancel button clicked'); // Debug log
+                    hideModal();
+                });
+
+                // Click outside to close
+                teamMessageModal.addEventListener('click', (e) => {
+                    if (e.target === teamMessageModal) {
+                        console.log('Clicked outside modal'); // Debug log
+                        hideModal();
+                    }
+                });
+
+                // Handle form submission
+                teamMessageForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    console.log('Form submitted'); // Debug log
+                    
+                    const message = document.getElementById('messageInput').value;
+                    const priority = document.getElementById('priorityInput').value;
+                    
+                    try {
+                        const response = await fetch('/api/team-message', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                message: message,
+                                priority: priority
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        if (data.success) {
+                            hideModal();
+                            alert('Team message sent successfully!');
+                        } else {
+                            alert('Error: ' + (data.error || 'Failed to send message'));
+                        }
+                    } catch (error) {
+                        console.error('Error:', error);
+                        alert('Failed to send message. Please try again.');
+                    }
+                });
+            } else {
+                console.error('Some modal elements not found:', {
+                    modal: !!teamMessageModal,
+                    button: !!pushTeamMessageBtn,
+                    cancelBtn: !!cancelTeamMessageBtn,
+                    form: !!teamMessageForm
+                });
+            }
+        });
+    </script>
+</body>
+</html>

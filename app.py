@@ -1,7 +1,9 @@
 # app.py
 from webbrowser import get
-from agents.agent import supervisor_agent, llm
+from agents.agent import llm, get_supervisor_for_user
 from agents.summary.summary_agent import extract_transcript, generate_summary
+from agents.manager_agent import create_manager_agent
+from agents.general_agent import supervisor_agent_general
 from dotenv import load_dotenv
 import os
 # import logging
@@ -16,7 +18,8 @@ load_dotenv()
 
 from flask import Flask, render_template, request, redirect, url_for, flash,jsonify
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
-from models import db, User, ChatSession, ChatMessage
+from models import db, User, ChatSession, ChatMessage, ClientSummary, TeamNotification, NotificationRead
+from datetime import datetime
 import uuid
 
 app = Flask(__name__)
@@ -29,6 +32,17 @@ db.init_app(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+# Initialize manager_agent as None, will be created when needed
+manager_agent = None
+
+def get_manager_agent():
+    global manager_agent
+    if manager_agent is None:
+        # Create manager agent within app context
+        with app.app_context():
+            manager_agent = create_manager_agent(llm=llm).compile()
+    return manager_agent
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -73,12 +87,148 @@ def home():
     .order_by(db.func.max(ChatMessage.timestamp).desc())
     .all()
     )
-    return render_template('chat.html', username=current_user.username, role=current_user.role,user_id = current_user.id, clients=clients, recent_chats=recent_chats)
+    
+    # Get sales agents if current user is a manager
+    sales_agents = None
+    if current_user.role == 'manager':
+        sales_agents = []
+        for agent in User.query.filter_by(role='salesagent').all():
+            summaries = ClientSummary.query.filter_by(user_id=agent.id).all()
+            sales_agents.append({
+                'id': agent.id,
+                'username': agent.username,
+                'summaries': [{'client_name': s.client_name, 'summary': s.summary} for s in summaries]
+            })
+    
+    return render_template('chat.html', username=current_user.username, role=current_user.role,
+                         user_id=current_user.id, clients=clients, recent_chats=recent_chats,
+                         sales_agents=sales_agents)
 
 @app.route('/admin')
 @role_required('admin')
 def admin():
     return f"Hello Admin {current_user.username}, this is a protected admin page."
+
+from dashboard.stats import get_sales_agents_client_stats, get_total_clients, get_dashboard_summary, get_seller_productivity, get_predictions_data
+
+@app.route('/api/team-message', methods=['POST'])
+@role_required('manager')
+def create_team_message():
+    data = request.json
+    message = data.get('message')
+    priority = data.get('priority', 'normal')
+    
+    if not message:
+        return jsonify({'error': 'Message is required'}), 400
+        
+    notification = TeamNotification(
+        manager_id=current_user.id,
+        message=message,
+        priority=priority
+    )
+    db.session.add(notification)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': 'Notification sent successfully'})
+
+@app.route('/api/notifications/unread', methods=['GET'])
+@login_required
+def get_unread_notifications_endpoint():
+    from agents.notification_helper import get_unread_notifications
+    print(f"Fetching unread notifications for user {current_user.id}")
+    
+    notifications = get_unread_notifications(current_user.id)
+    print(f"Found {len(notifications)} unread notifications")
+    
+    return jsonify(notifications)
+
+@app.route('/api/notifications/mark-read', methods=['POST'])
+@login_required
+def mark_notification_read():
+    notification_id = request.json.get('notification_id')
+    if not notification_id:
+        return jsonify({'error': 'Notification ID required'}), 400
+        
+    read_record = NotificationRead(
+        notification_id=notification_id,
+        user_id=current_user.id
+    )
+    db.session.add(read_record)
+    db.session.commit()
+    
+    return jsonify({'success': True})
+
+@app.route('/manager/dashboard')
+@role_required('manager')
+def manager_dashboard():
+    agent_stats = get_sales_agents_client_stats()
+    dashboard_summary = get_dashboard_summary()
+    productivity_data = get_seller_productivity()
+    predictions_data = get_predictions_data()
+    return render_template('manager_dashboard.html', 
+                         agent_stats=agent_stats,
+                         dashboard_summary=dashboard_summary,
+                         productivity_data=productivity_data,
+                         predictions_data=predictions_data)
+
+@app.route('/manager/team')
+@role_required('manager')
+def get_team_members():
+    sales_agents = User.query.filter_by(role='salesagent').all()
+    return render_template('team_members.html', team_members=sales_agents)
+
+@app.route('/manager/agent-summary/<int:agent_id>', methods=['POST'])
+@role_required('manager')
+def create_agent_summary_chat(agent_id):
+    agent = User.query.get(agent_id)
+    if not agent:
+        return jsonify({'error': 'Agent not found'}), 404
+    
+    # Get all client summaries for this agent
+    summaries = ClientSummary.query.filter_by(user_id=agent_id).all()
+    
+    # Format the summary message
+    message = f"In summary, Agent {agent.username} is working on {len(summaries)} active clients.\n\nHere are the updates:\n"
+    
+    for summary in summaries:
+        message += f"- {summary.client_name}: {summary.summary}\n"
+    
+    # Check if a chat with this title already exists
+    chat_title = f"Summary: {agent.username}'s Clients"
+    existing_chat = ChatSession.query.filter_by(
+        user_id=current_user.id,
+        title=chat_title
+    ).order_by(ChatSession.created_at.desc()).first()
+    
+    if existing_chat:
+        # Use existing chat
+        chat_id = existing_chat.id
+    else:
+        # Create a new chat session
+        chat_id = str(uuid.uuid4())
+        new_chat = ChatSession(
+            id=chat_id,
+            user_id=current_user.id,
+            title=chat_title,
+        )
+        db.session.add(new_chat)
+    
+    # Add the summary message as a bot message
+    bot_msg = ChatMessage(
+        session_id=chat_id,
+        user_id=current_user.id,
+        message=message,
+        sender='bot'
+    )
+    db.session.add(bot_msg)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'chat_id': chat_id,
+        'message': message,
+        'isExisting': existing_chat is not None
+    })
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -153,9 +303,9 @@ def manage_users():
     return render_template('admin_users.html', users=users)
 
 
-@app.route("/v1/chat/salesrep",methods=['POST'])
+@app.route("/v1/chat/agent", methods=['POST'])
 @login_required
-def sales_agent():
+def agent_chat():
     data = request.json
     chat_id = data['chat_id']
     user_message = data['message']
@@ -169,16 +319,42 @@ def sales_agent():
     )
     db.session.add(user_msg)
 
-    # Select agent based on user role
+    # Get the chat session to check if it's a client chat
+    chat_session = ChatSession.query.get(chat_id)
+    
+    # Choose agent based on context and role
     if current_user.role == 'manager':
-        from agents.manager_agent import manager_agent as active_agent
-    else:
-        from agents.agent import supervisor_agent as active_agent
-
-    # Run the appropriate agent
-    result = active_agent.invoke({
-        "messages": [{"role": "user", "content": user_message}]
-    }, config={"configurable": {"thread_id": chat_id}})
+        # Get or create manager agent with current dashboard data
+        agent = get_manager_agent()
+        
+        # Get conversation history for context
+        chat_history = ChatMessage.query.filter_by(session_id=chat_id).order_by(ChatMessage.timestamp).all()
+        messages = []
+        
+        # Include first message (summary) and user's new message
+        if chat_history:
+            first_message = chat_history[0]
+            if first_message.sender == 'bot':
+                messages.append({"role": "system", "content": f"Previous context - Agent Summary: {first_message.message}"})
+        
+        messages.append({"role": "user", "content": user_message})
+        
+        # Run the bot with context
+        result = agent.invoke({
+            "messages": messages
+        }, config={"configurable": {"thread_id": chat_id}})
+    elif chat_session and chat_session.client_name:  # client-specific chat
+        # Create a new supervisor agent specifically for this client chat
+        agent = get_supervisor_for_user(user_id=str(current_user.id))
+        
+        result = agent.invoke({
+            "messages": [{"role": "user", "content": user_message}]
+        }, config={"configurable": {"thread_id": chat_id}})
+    else:  # general chat for sales agents
+        agent = supervisor_agent_general
+        result = agent.invoke({
+            "messages": [{"role": "user", "content": user_message}]
+        }, config={"configurable": {"thread_id": chat_id}})
 
     ai_response = result['messages'][-1].content
 
@@ -191,8 +367,42 @@ def sales_agent():
     )
     db.session.add(bot_msg)
 
+    # Update client summary counter if this is a client chat
+    if chat_session and chat_session.client_name:
+        # Count total messages in this client chat
+        message_count = ChatMessage.query.filter_by(session_id=chat_id).count()
+        
+        # Get or create client summary
+        client_summary = ClientSummary.query.filter_by(
+            user_id=current_user.id,
+            client_name=chat_session.client_name
+        ).first()
+        
+        # Every 5 messages, update the summary
+        if message_count % 5 == 0:
+            # Get recent messages
+            messages = ChatMessage.query.filter_by(
+                session_id=chat_id
+            ).order_by(ChatMessage.timestamp.desc()).limit(10).all()
+            
+            # Generate summary
+            transcript = extract_transcript(messages)
+            summary = generate_summary(transcript)
+            
+            if client_summary:
+                client_summary.summary = summary
+                client_summary.last_updated = datetime.utcnow()
+            else:
+                client_summary = ClientSummary(
+                    user_id=current_user.id,
+                    client_name=chat_session.client_name,
+                    summary=summary
+                )
+                db.session.add(client_summary)
+
     db.session.commit()
     return jsonify(ai_response)
+
 
 
 @app.route("/v1/chat/newchat",methods=['POST'])
@@ -201,12 +411,34 @@ def new_chat_id():
     user_id = int(request.json['user_id'])
     client_name = request.json.get('client_name')  # Optional client name
     title = request.json.get('title', 'Untitled Chat')  # Default title if not provided
-    chat_id = uuid.uuid4()
+    agent_id = request.json.get('agent_id')  # For agent summaries
     
-    new_chat = ChatSession(id=str(chat_id), user_id=current_user.id, title = title, client_name=client_name)
+    chat_id = str(uuid.uuid4())
+    new_chat = ChatSession(id=chat_id, user_id=current_user.id, title=title, client_name=client_name)
     db.session.add(new_chat)
-    db.session.commit()
 
+    # If this is an agent summary request
+    if agent_id and current_user.role == 'manager':
+        agent = User.query.get(agent_id)
+        if agent:
+            # Get all client summaries for this agent
+            summaries = ClientSummary.query.filter_by(user_id=agent_id).all()
+            
+            # Format the summary message
+            message = f"In summary, Agent {agent.username} is working on {len(summaries)} active clients.\n\nHere are the updates:\n"
+            for summary in summaries:
+                message += f"- {summary.client_name}: {summary.summary}\n"
+            
+            # Add the summary as a bot message
+            bot_msg = ChatMessage(
+                session_id=chat_id,
+                user_id=current_user.id,
+                message=message,
+                sender='bot'
+            )
+            db.session.add(bot_msg)
+    
+    db.session.commit()
     return jsonify({'id': chat_id, 'title': title})
 
 # Create client endpoint
