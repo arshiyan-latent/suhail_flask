@@ -944,7 +944,7 @@ def delete_transcript(transcript_id):
 if __name__ == '__main__':
     with app.app_context():
         # Check if we need to add manager_id column
-        db.create_all()
+        
         inspector = db.inspect(db.engine)
         existing_columns = [column['name'] for column in inspector.get_columns('user')]
         
@@ -954,6 +954,6 @@ if __name__ == '__main__':
                 conn.execute(db.text("ALTER TABLE user ADD COLUMN manager_id INTEGER"))
                 conn.commit()
                 print("Added manager_id column to user table")
+        db.create_all()
         
-        
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port = 5000, debug=True)
