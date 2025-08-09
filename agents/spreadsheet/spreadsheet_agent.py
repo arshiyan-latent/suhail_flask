@@ -7,17 +7,19 @@ import os
 
 def load_historical_data():
     """Load the historical data with proper error handling"""
-    try:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(base_dir, 'sheets', 'test_historical.xlsx')
-        if os.path.exists(file_path):
-            return pd.read_excel(file_path)
-        else:
-            print(f"Warning: {file_path} not found")
-            return pd.DataFrame()  # Return empty DataFrame if file not found
-    except Exception as e:
-        print(f"Error loading data: {e}")
-        return pd.DataFrame()
+
+    file_path = os.path.join(os.getcwd(), 'agents', 'spreadsheet', 'sheets', 'test_historical.xlsx')
+
+    print(f"Resolved path: {file_path}")
+
+    if os.path.exists(file_path):
+        return pd.read_excel(file_path)
+    else:
+        print(f"Warning: {file_path} not found")
+        return pd.DataFrame()  # Return empty DataFrame if file not found
+    # except Exception as e:
+    #     print(f"Error loading data: {e}")
+    #     return pd.DataFrame()
 
 df = load_historical_data()
 
