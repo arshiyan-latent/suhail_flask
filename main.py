@@ -5,7 +5,7 @@ from agents.summary.summary_agent import extract_transcript, generate_summary
 from agents.manager_agent import create_manager_agent
 from agents.general_agent import supervisor_agent_general
 from dotenv import load_dotenv
-import os, tempfile, time, json
+import os, tempfile, time, json, subprocess
 # import logging
 from langchain_openai import ChatOpenAI
 from pathlib import Path
@@ -113,21 +113,72 @@ def get_manager_agent():
     return manager_agent
 
 # --- helper: optional diarization via pyannote (set HUGGINGFACE_TOKEN) ---
+_DIAR_PIPELINE = None  # cache
+
+def _to_wav_mono16k(src_path: str) -> str:
+    """Return a temp WAV (mono, 16 kHz) converted from any input using ffmpeg."""
+    tmp_wav = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    tmp_wav.close()
+    cmd = [
+        "ffmpeg", "-y", "-i", src_path,
+        "-ac", "1",        # mono
+        "-ar", "16000",    # 16 kHz
+        "-f", "wav", tmp_wav.name
+    ]
+    try:
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        return tmp_wav.name
+    except Exception as e:
+        # If ffmpeg missing or conversion failed
+        try:
+            os.unlink(tmp_wav.name)
+        except Exception:
+            pass
+        print("[diarize] ffmpeg conversion failed:", repr(e))
+        return None
+
 def diarize_file(audio_path: str):
-    hf_token = os.getenv("HUGGINGFACE_TOKEN")
-    if not hf_token:
-        return None  # diarization disabled
+    token = os.getenv("HUGGINGFACE_TOKEN")
+    if not token:
+        print("[diarize] HUGGINGFACE_TOKEN not set; skipping diarization.")
+        return None
+
     try:
         from pyannote.audio import Pipeline
-        pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token=hf_token)
-        diarization = pipeline(audio_path)
+    except Exception as e:
+        print("[diarize] pyannote import failed:", repr(e))
+        return None
+
+    # Convert to WAV mono/16k so libsndfile can read it
+    wav_path = _to_wav_mono16k(audio_path)
+    if not wav_path:
+        return None
+
+    global _DIAR_PIPELINE
+    try:
+        if _DIAR_PIPELINE is None:
+            _DIAR_PIPELINE = Pipeline.from_pretrained(
+                "pyannote/speaker-diarization-3.1",
+                use_auth_token=token
+            )
+
+        result = _DIAR_PIPELINE(wav_path)
         segs = []
-        for turn, _, speaker in diarization.itertracks(yield_label=True):
-            segs.append({"start": float(turn.start), "end": float(turn.end), "speaker": str(speaker)})
+        for turn, _, speaker in result.itertracks(yield_label=True):
+            segs.append({
+                "start": float(turn.start),
+                "end": float(turn.end),
+                "speaker": str(speaker),
+            })
         return segs
     except Exception as e:
-        print("[diarize] disabled or failed:", e)
+        print("[diarize] failed:", repr(e))
         return None
+    finally:
+        try:
+            os.unlink(wav_path)
+        except Exception:
+            pass
 
 # --- helper: map transcript segments -> speakers by time overlap ---
 def assign_speakers(transcript_segments, diar_segments):
