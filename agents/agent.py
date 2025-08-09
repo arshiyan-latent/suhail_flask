@@ -6,13 +6,8 @@ from langgraph_supervisor import create_supervisor
 from agents.package_detals.agent import agent_policy_package_details
 from agents.spreadsheet.spreadsheet_agent import agent_spreadsheet_data
 from langgraph.checkpoint.sqlite import SqliteSaver
-<<<<<<< HEAD
-from langgraph.checkpoint.postgres import PostgresSaver
-from psycopg import Connection
-=======
 from agents.notification_helper import format_notifications_for_prompt
 
->>>>>>> origin/main
 
 from dotenv import load_dotenv
 
@@ -44,16 +39,9 @@ conn = sqlite3.connect("database/suhail_database.db",check_same_thread=False)
 
 memory = SqliteSaver(conn)
 
-<<<<<<< HEAD
-
-
-
-supervisor_prompt= '''
-=======
 def get_supervisor_prompt(user_id=None):
     notifications = format_notifications_for_prompt(user_id=user_id)
     prompt_template = f'''
->>>>>>> origin/main
 First introduction message MUST be displayed in BOTH arabic and english, regardless of user input.
 
 Current team notifications status: {notifications}

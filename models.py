@@ -78,3 +78,20 @@ class NotificationRead(db.Model):
     
     notification = db.relationship('TeamNotification')
     user = db.relationship('User', backref=db.backref('notification_reads', lazy=True))
+
+class Transcript(db.Model):
+    __tablename__ = 'transcript'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    chat_id = db.Column(db.String, db.ForeignKey('chat_sessions.id'), nullable=True)
+    title = db.Column(db.String(255), nullable=False, default='Untitled Meeting')
+    text = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=db.func.now())
+
+    # NEW (optional)
+    file_path = db.Column(db.String, nullable=True)
+    speakers_count = db.Column(db.Integer, nullable=True)
+    language = db.Column(db.String(16), nullable=True)
+
+    user = db.relationship('User', backref='transcripts')
+    chat = db.relationship('ChatSession', backref='transcripts')
