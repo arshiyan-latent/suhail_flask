@@ -26,9 +26,9 @@ def get_unread_notifications(user_id: int = None) -> List[Dict]:
         
         # Order by priority and timestamp
         notifications = query.order_by(
-            # Priority ordering: urgent -> normal -> low
+            # Priority ordering: Internal -> External -> General
             db.case(
-                {'urgent': 1, 'normal': 2, 'low': 3},
+                {'Internal Announcement': 1, 'External Broadcast For Clients': 2, 'General Notes': 3},
                 value=TeamNotification.priority
             ),
             TeamNotification.timestamp.desc()
@@ -56,7 +56,7 @@ def format_notifications_for_prompt(user_id: int = None) -> str:
     print(f"Formatting {len(notifications)} notifications")
     notification_text = "\n🔔 **Unread Team Messages:**\n\n"
     for n in notifications:
-        priority_icon = "🔴" if n['priority'] == "urgent" else "🟡" if n['priority'] == "normal" else "🟢"
+        priority_icon = "🔴" if n['priority'] == "Internal Announcement" else "🟡" if n['priority'] == "External Broadcast For Clients" else "🟢"
         notification_text += f"{priority_icon} {n['message']}\n"
     print(f"Final formatted text: {notification_text}")
     return notification_text

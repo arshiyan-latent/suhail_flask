@@ -274,10 +274,13 @@ from dashboard.stats import get_sales_agents_client_stats, get_total_clients, ge
 def create_team_message():
     data = request.json
     message = data.get('message')
-    priority = data.get('priority', 'normal')
+    priority = data.get('priority', 'General Notes')
     
     if not message:
         return jsonify({'error': 'Message is required'}), 400
+    
+    if priority not in ['Internal Announcement', 'External Broadcast For Clients', 'General Notes']:
+        priority = 'General Notes'  # Default fallback
         
     notification = TeamNotification(
         manager_id=current_user.id,
@@ -955,5 +958,4 @@ if __name__ == '__main__':
                 conn.commit()
                 print("Added manager_id column to user table")
         db.create_all()
-        
-    app.run(host='0.0.0.0', port = 5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)

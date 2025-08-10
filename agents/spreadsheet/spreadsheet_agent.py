@@ -36,6 +36,27 @@ Some rules for the spreadsheet agent:
 - Sale Probability Penalty if Required Price Exceeds Budget: Penalty Factor = 1 - (Variance %); Final Probability × Penalty Factor
 '''
 
+# Package hierarchy from highest to lowest
+PACKAGE_HIERARCHY = {
+    "diamond": 5,
+    "gold": 4,
+    "silver": 3,
+    "bronze": 2,
+    "basic": 1
+}
+
+def get_alternative_package(current_package: str) -> str:
+    """Get the next lower package in the hierarchy"""
+    current_level = PACKAGE_HIERARCHY.get(current_package.lower())
+    if not current_level or current_level == 1:  # If current is basic or unknown
+        return None
+    
+    # Find the package one level down
+    for pkg, level in PACKAGE_HIERARCHY.items():
+        if level == current_level - 1:
+            return pkg.capitalize()
+    return None
+
 @tool
 def assess_new_offer(
     region: str,
@@ -47,7 +68,7 @@ def assess_new_offer(
     logistic_output: float = 0.65,
     similarity_score: float = 0.75,
     adjustment: float = 1.1,
-) -> str:
+) -> dict:
     """Evaluate the feasibility and likelihood of success for a new insurance offer using historical benchmarks and strict sales logic."""
     
     if df.empty:
@@ -99,20 +120,22 @@ def assess_new_offer(
         return f"❌ Error calculating benchmarks: {str(e)}"
 
     # --- Input-derived Values ---
-    offered_budget = lives * budget_per_life
-    true_cost = offered_budget / target_lr
-    target_price = offered_budget * 1.05
+    offered_budget = lives * budget_per_life  # Total budget for all lives
+    offered_budget_per_life = budget_per_life  # Budget per life
+    true_cost = budget_per_life / target_lr  # Calculate per life first
+    target_price = true_cost * 1.05  # Add 5% contingency to the true cost (per life)
 
     # --- Rule 1: Valid Range Check ---
     valid_range = abs(lives - benchmark_lives) / benchmark_lives <= 0.15
 
     # --- Expected LR Calculation ---
     expected_lr = None
-    if historical_claims_per_life.lower() != "i don’t know":
+    claims_input = str(historical_claims_per_life).strip().lower().replace("’", "'")
+    if claims_input != "i don't know":
         try:
-            claims_per_life = float(historical_claims_per_life)
+            claims_per_life = float(claims_input)
             expected_lr = claims_per_life / budget_per_life
-        except:
+        except Exception:
             expected_lr = None
 
     # --- Sale Probability Calculation ---
@@ -122,12 +145,107 @@ def assess_new_offer(
     if expected_lr is not None and expected_lr <= target_lr:
         sale_probability *= 1.05  # Rule 6
 
-    if target_price > offered_budget:
-        penalty = 1 - ((target_price - offered_budget) / offered_budget)
+    # Use per-life budget for variance/penalty
+    if target_price > offered_budget_per_life:
+        variance = (target_price - offered_budget_per_life) / max(offered_budget_per_life, 1e-9)
+        penalty = max(0.0, 1 - variance)
         sale_probability *= penalty  # Rule 7
 
+    # Calculate alternative package if current package exceeds budget
+    alternative_results = None
+    fallback_results = None
+    
+    print(f"\n=== Package Comparison Debug ===")
+    print(f"Current package: {package}")
+    print(f"Target price per life: {target_price:.2f} SAR")
+    print(f"Budget per life: {offered_budget_per_life:.2f} SAR")
+    print(f"Total target price: {target_price * lives:,.2f} SAR")
+    print(f"Total offered budget: {offered_budget:,.2f} SAR")
+    print(f"Over budget? {target_price > offered_budget_per_life}")
+    
+    if target_price > offered_budget_per_life:
+        alt_package = get_alternative_package(package)
+        print(f"Alternative package suggested: {alt_package}")
+        if alt_package:
+            try:
+                alt_matches = df[df[package_col].str.lower().str.contains(alt_package.lower(), na=False)]
+                if not alt_matches.empty:
+                    alt_claims_per_life = (alt_matches[claims_col].sum() / alt_matches[lives_col].sum()) if claims_col else None
+                    alt_true_cost = budget_per_life / target_lr
+                    alt_target_price = alt_true_cost * 1.05
+                    alt_expected_lr = alt_claims_per_life / budget_per_life if alt_claims_per_life else None
+                    alt_sale_prob = base_prob
+                    if alt_expected_lr and alt_expected_lr <= target_lr:
+                        alt_sale_prob *= 1.05
+                    if alt_target_price > offered_budget_per_life:
+                        variance = (alt_target_price - offered_budget_per_life) / max(offered_budget_per_life, 1e-9)
+                        penalty = max(0.0, 1 - variance)
+                        alt_sale_prob *= penalty
+                    
+                    alternative_results = {
+                        "package": alt_package,
+                        "price_per_life": alt_target_price,
+                        "fits_budget": alt_target_price <= offered_budget_per_life,
+                        "expected_lr": alt_expected_lr,
+                        "sale_probability": alt_sale_prob
+                    }
+                    print(f"\n=== Alternative Package Details ===")
+                    print(f"Package: {alt_package}")
+                    print(f"Price per life: {alt_target_price:.2f} SAR")
+                    print(f"Fits budget? {alt_target_price <= offered_budget_per_life}")
+                    
+                    # If alternative is still over budget, calculate Basic package as fallback
+                    if alt_target_price > offered_budget_per_life and alt_package.lower() != "basic":
+                        basic_matches = df[df[package_col].str.lower().str.contains("basic", na=False)]
+                        if not basic_matches.empty:
+                            basic_claims_per_life = (basic_matches[claims_col].sum() / basic_matches[lives_col].sum()) if claims_col else None
+                            basic_true_cost = budget_per_life / target_lr
+                            basic_target_price = basic_true_cost * 1.05
+                            basic_expected_lr = basic_claims_per_life / budget_per_life if basic_claims_per_life else None
+                            basic_sale_prob = base_prob
+                            if basic_expected_lr and basic_expected_lr <= target_lr:
+                                basic_sale_prob *= 1.05
+                            
+                            fallback_results = {
+                                "package": "Basic",
+                                "price_per_life": basic_target_price,
+                                "fits_budget": basic_target_price <= offered_budget_per_life,
+                                "expected_lr": basic_expected_lr,
+                                "sale_probability": basic_sale_prob
+                            }
+                            print(f"\n=== Fallback Package Details ===")
+                            print(f"Basic package price per life: {basic_target_price:.2f} SAR")
+                            print(f"Fits budget? {basic_target_price <= offered_budget_per_life}")
+            except Exception as e:
+                print(f"Error calculating alternative package: {str(e)}")
+
     # --- Result Summary ---
-    result = f"--- 📊 Benchmark Comparison for {package} in {region} ---\n"
+    print("\n=== Generating Comparison Table ===")
+    print(f"Number of packages to display: {1 + bool(alternative_results) + bool(fallback_results)}")
+    
+    result = "--- 📊 Package Comparison Table ---\n"
+    result += f"{'Package':<15} {'Price/Life':<15} {'Fits Budget':<15} {'Exp. LR':<15} {'Sale Prob.':<15}\n"
+    result += f"{'-' * 75}\n"
+    
+    # Current package
+    result += f"{package:<15} {target_price:,.2f} SAR     {'✅' if target_price <= offered_budget_per_life else '❌':<15} "
+    result += f"{expected_lr*100:.1f}%{' '*10 if expected_lr else 'N/A':<15} {sale_probability*100:.1f}%\n"
+    
+    # Alternative package
+    if alternative_results:
+        result += f"{alternative_results['package']:<15} {alternative_results['price_per_life']:,.2f} SAR     "
+        result += f"{'✅' if alternative_results['fits_budget'] else '❌':<15} "
+        result += f"{alternative_results['expected_lr']*100:.1f}%{' '*10 if alternative_results['expected_lr'] else 'N/A':<15} "
+        result += f"{alternative_results['sale_probability']*100:.1f}%\n"
+    
+    # Fallback package
+    if fallback_results:
+        result += f"{fallback_results['package']:<15} {fallback_results['price_per_life']:,.2f} SAR     "
+        result += f"{'✅' if fallback_results['fits_budget'] else '❌':<15} "
+        result += f"{fallback_results['expected_lr']*100:.1f}%{' '*10 if fallback_results['expected_lr'] else 'N/A':<15} "
+        result += f"{fallback_results['sale_probability']*100:.1f}%\n"
+    
+    result += f"\n--- 📈 Additional Information ---\n"
     result += f"• Benchmark Lives: {benchmark_lives:.0f}\n"
     result += f"• Valid Range (±15%): {'✅ Yes' if valid_range else '❌ No'}\n"
     
@@ -157,13 +275,14 @@ def assess_new_offer(
     else:
         result += "ℹ️ Historical claims per life not provided — cannot compute expected LR.\n"
 
-    if target_price > offered_budget:
+    # Use per-life comparison for message as well
+    if target_price > offered_budget_per_life:
         result += "📉 Target price exceeds budget — recommend **downgrading package**.\n"
 
     result += f"\n--- 🧠 Sales Forecast ---\n"
     result += f"• Final Sale Probability: {sale_probability:.2%} (after adjustments)\n"
 
-    return {
+    response = {
         "benchmark_lives": round(benchmark_lives, 2),
         "valid_range": valid_range,
         "avg_loss_ratio": round(avg_loss_ratio, 4) if avg_loss_ratio else None,
@@ -175,10 +294,42 @@ def assess_new_offer(
         "target_price": round(target_price, 2),
         "true_cost_per_life": round(true_cost, 2),
         "expected_lr": round(expected_lr, 4) if expected_lr is not None else None,
-        "recommend_downgrade": target_price > offered_budget,
+        # Use per-life recommendation
+        "recommend_downgrade": target_price > offered_budget_per_life,
         "final_probability": round(sale_probability, 4),
-        "used_claims_fallback": historical_claims_per_life.lower() == "i don’t know"
+        # Normalize fallback detection
+        "used_claims_fallback": claims_input == "i don't know",
+        "comparison_table": result,
+        "packages": [
+            {
+                "name": package,
+                "price_per_life": round(target_price, 2),
+                "fits_budget": target_price <= offered_budget_per_life,
+                "expected_lr": round(expected_lr, 4) if expected_lr is not None else None,
+                "sale_probability": round(sale_probability, 4)
+            }
+        ]
     }
+
+    if alternative_results:
+        response["packages"].append({
+            "name": alternative_results["package"],
+            "price_per_life": round(alternative_results["price_per_life"], 2),
+            "fits_budget": alternative_results["fits_budget"],
+            "expected_lr": round(alternative_results["expected_lr"], 4) if alternative_results["expected_lr"] is not None else None,
+            "sale_probability": round(alternative_results["sale_probability"], 4)
+        })
+
+    if fallback_results:
+        response["packages"].append({
+            "name": fallback_results["package"],
+            "price_per_life": round(fallback_results["price_per_life"], 2),
+            "fits_budget": fallback_results["fits_budget"],
+            "expected_lr": round(fallback_results["expected_lr"], 4) if fallback_results["expected_lr"] is not None else None,
+            "sale_probability": round(fallback_results["sale_probability"], 4)
+        })
+
+    return response
 
 
 def agent_spreadsheet_data(llm):
@@ -193,6 +344,12 @@ def agent_spreadsheet_data(llm):
         3. Be proactive - if someone mentions premiums, regions, packages, claims, etc., check the data
         4. Provide context and insights based on the historical data
         5. Help evaluate new business opportunities using historical benchmarks
+        
+        When presenting multiple package options:
+        - Always show all available packages in the comparison
+        - Include the requested package even if over budget
+        - Show the next lower package as an alternative
+        - Show Basic package as a fallback when needed
         
         Use assess_new_offer for evaluating new insurance offers with all the required parameters.
         """,
