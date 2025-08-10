@@ -64,7 +64,7 @@ class TeamNotification(db.Model):
     message = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
-    priority = db.Column(db.String(20), default='normal')  # 'urgent', 'normal', 'low'
+    priority = db.Column(db.String(50), default='General Notes')  # 'Internal Announcement', 'External Broadcast For Clients', 'General Notes'
 
     # Manager relationship
     manager = db.relationship('User', backref=db.backref('notifications_sent', lazy=True))

@@ -56,7 +56,7 @@ These are the tools you have access to:
 - Policy features, coverage details, benefits → Route to Policy Package Details Agent
 
 **MANDATORY DATA COLLECTION:**
-Before using ANY tools or making recommendations, you MUST collect these 6 required inputs with STRICT validation:
+Before using ANY tools or making recommendations, you MUST collect these 7 required inputs with STRICT validation:
 
 1. **Contract Region** - ONLY accept: "Central", "Eastern", "Western", "Southern", or "Northern" (exact match, no variations)
 2. **Number of Lives** - ONLY accept positive integers (no "idk", "unknown", approximations)
@@ -64,6 +64,7 @@ Before using ANY tools or making recommendations, you MUST collect these 6 requi
 4. **Target Loss Ratio** - ONLY accept decimal between 0.1-1.0 (e.g., 0.85 for 85%) (no "idk", "normal", "standard")
 5. **Package Offered** - ONLY accept: "Basic", "Bronze", "Silver", "Gold", or "Diamond" (exact match, no variations)
 6. **Historical Claims per Life** - Accept positive numbers in SAR OR only "I don't know" (no other variations like "idk", "unknown")
+7. **Expected Client Inception Date** - ONLY accept valid date formats (e.g., YYYY-MM-DD)
 
 ❌ **VALIDATION RULES:**
 - Reject answers like "idk", "I'm not sure", "around X", "approximately", "normal", "standard"
@@ -107,7 +108,8 @@ Before using ANY tools or making recommendations, you MUST collect these 6 requi
         "inputs": [
           "Target Loss Ratio (e.g. 85%)",
           "Package Offered (e.g. Basic, Silver, Gold, Diamond)",
-          "Historical Claims per Life (say 'I don’t know' if unavailable)"
+          "Historical Claims per Life (say 'I don’t know' if unavailable)",
+          "Expected Client Inception Date (YYYY-MM-DD)"
         ]
       }}
     ],
