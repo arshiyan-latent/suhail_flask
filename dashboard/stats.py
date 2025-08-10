@@ -88,45 +88,48 @@ def get_predictions_data():
 
 def get_seller_productivity():
     """
-    Get productivity metrics for all sales agents
-    Returns a list of dictionaries containing seller performance data
+    Get productivity metrics for all sales agents with enhanced engagement metrics
+    Returns a list of dictionaries containing detailed seller performance data
     """
     sales_agents = User.query.filter_by(role='salesagent').all()
     productivity_data = []
     
-    risk_levels = ['Low', 'Medium', 'High']  # Placeholder risk levels
-    recommendations = [
-        'Increase client engagement',
-        'Focus on high-value prospects',
-        'Schedule follow-up meetings',
-        'Review pipeline strategy'
-    ]  # Placeholder recommendations
+    insights = [
+        'High engagement with prospects, consistent follow-ups',
+        'Strong focus on high-value opportunities, needs more client engagement',
+        'Excellent deal closure rate, could improve initial engagement',
+        'Good pipeline management, needs focus on deal conversion',
+        'Active in client outreach, needs support in deal closure',
+        'Strong relationship building, pipeline needs growth'
+    ]
     
-    import random  # For generating placeholder data
+    import random
     
     for agent in sales_agents:
-        # Get actual client count
-        assigned_clients = db.session.query(func.count(func.distinct(ChatSession.client_name)))\
+        # Get actual engaged clients count
+        engaged_clients = db.session.query(func.count(func.distinct(ChatSession.client_name)))\
             .filter(
                 ChatSession.user_id == agent.id,
                 ChatSession.client_name.isnot(None),
                 ChatSession.client_name != ''
             ).scalar() or 0
             
-        # Placeholder data - will be replaced with real data later
-        closed_accounts = random.randint(1, assigned_clients) if assigned_clients > 0 else 0
-        quota_achievement = random.uniform(50, 120)
-        risk_level = random.choice(risk_levels)
-        potential_close = random.randint(100000, 1000000)
+        # Generate realistic placeholder data
+        closed_deals = random.randint(0, max(1, engaged_clients // 2))
+        win_probability = random.uniform(0.30, 0.85)  # 30% to 85%
+        win_ratio = random.uniform(0.10, 0.85)
+        pipeline_value = random.randint(1000000, 5000000)  # 1M to 5M SAR
+        engaged_opportunities = random.randint(max(1, engaged_clients // 2), engaged_clients + 3)
         
         productivity_data.append({
             'seller_name': agent.username,
-            'accounts_assigned': assigned_clients,
-            'accounts_closed': closed_accounts,
-            'quota_achievement': quota_achievement,
-            'risk_level': risk_level,
-            'potential_close': potential_close,
-            'ai_recommendation': random.choice(recommendations)
+            'engaged_clients': engaged_clients,
+            'win_probability': f"{win_probability * 100:.1f}%",
+            'closed_deals': closed_deals,
+            'win_ratio': f"{win_ratio * 100:.1f}%",
+            'sales_pipeline': pipeline_value,
+            'engaged_opportunities': engaged_opportunities,
+            'general_insights': random.choice(insights)
         })
     
     return productivity_data

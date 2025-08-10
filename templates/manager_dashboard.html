@@ -39,8 +39,8 @@
             <!-- Total Business Card -->
             <div class="bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 rounded-xl p-6 backdrop-blur-md">
                 <div class="flex flex-col">
-                    <div class="text-white/70 text-sm font-medium mb-2">Total Business in Hand</div>
-                    <div class="text-3xl font-bold">{{ "{:,.0f}".format(dashboard_summary.total_business) }} SAR</div>
+                    <div class="text-white/70 text-sm font-medium mb-2">Sales Pipeline</div>
+                    <div class="text-3xl font-bold">{{ "{:,.0f}".format(dashboard_summary.total_business) }} SAR</div> <!-- MUST later be changed in the stats functions from total business to sales pipeline  -->
                     <div class="mt-2 text-xs text-white/50">Current Portfolio Value</div>
                 </div>
             </div>
@@ -63,35 +63,26 @@
                     <thead>
                         <tr class="text-left border-b border-white/10">
                             <th class="py-2 px-3 font-semibold">Seller Name</th>
-                            <th class="py-2 px-3 font-semibold">Assigned</th>
-                            <th class="py-2 px-3 font-semibold">Closed</th>
-                            <th class="py-2 px-3 font-semibold">Quota</th>
-                            <th class="py-2 px-3 font-semibold">Risk</th>
-                            <th class="py-2 px-3 font-semibold">Potential</th>
-                            <th class="py-2 px-3 font-semibold">AI Insight</th>
+                            <th class="py-2 px-3 font-semibold">Engaged Clients</th>
+                            <th class="py-2 px-3 font-semibold">Win Probability</th>
+                            <th class="py-2 px-3 font-semibold">Closed Deals</th>
+                            <th class="py-2 px-3 font-semibold">Win Ratio</th>
+                            <th class="py-2 px-3 font-semibold">Sales Pipeline</th>
+                            <th class="py-2 px-3 font-semibold">Engaged Opportunities</th>
+                            <th class="py-2 px-3 font-semibold">General Insights</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for seller in productivity_data %}
                         <tr class="border-b border-white/5 hover:bg-white/5">
                             <td class="py-2 px-3">{{ seller.seller_name }}</td>
-                            <td class="py-2 px-3">{{ seller.accounts_assigned }}</td>
-                            <td class="py-2 px-3">{{ seller.accounts_closed }}</td>
-                            <td class="py-2 px-3">{{ "%.1f"|format(seller.quota_achievement) }}%</td>
-                            <td class="py-2 px-3">
-                                <span class="px-2 py-0.5 rounded-full text-xs 
-                                    {% if seller.risk_level == 'Low' %}
-                                        bg-green-500/20 text-green-200
-                                    {% elif seller.risk_level == 'Medium' %}
-                                        bg-yellow-500/20 text-yellow-200
-                                    {% else %}
-                                        bg-red-500/20 text-red-200
-                                    {% endif %}">
-                                    {{ seller.risk_level }}
-                                </span>
-                            </td>
-                            <td class="py-2 px-3">{{ "{:,.0f}".format(seller.potential_close) }} SAR</td>
-                            <td class="py-2 px-3 text-white/70">{{ seller.ai_recommendation }}</td>
+                            <td class="py-2 px-3">{{ seller.engaged_clients }}</td>
+                            <td class="py-2 px-3">{{ seller.win_probability }}</td>
+                            <td class="py-2 px-3">{{ seller.closed_deals }}</td>
+                            <td class="py-2 px-3">{{ seller.win_ratio }}</td>
+                            <td class="py-2 px-3">{{ "{:,.0f}".format(seller.sales_pipeline) }} SAR</td>
+                            <td class="py-2 px-3">{{ seller.engaged_opportunities }}</td>
+                            <td class="py-2 px-3 text-white/70">{{ seller.general_insights }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -103,8 +94,9 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <!-- End of Year Prediction Card -->
             <div class="bg-gradient-to-br from-violet-500/20 to-violet-600/20 rounded-xl p-4 backdrop-blur-md">
-                <h3 class="text-base font-semibold mb-2">End of Year Predictions</h3>
-                <div class="text-2xl font-bold">{{ "{:,.0f}".format(predictions_data.year_end_prediction) }} SAR</div>
+                <h3 class="text-base font-semibold mb-2">Sales Forecast</h3>
+                <div class="text-2xl font-bold">{{ "{:,.0f}".format(predictions_data.year_end_prediction) }} SAR</div>   <!-- Must change this in stats.py to reflect the change to sales forecast from end of year predicitons -->
+
                 <div class="text-sm text-white/70">Projected Closure</div>
             </div>
 
