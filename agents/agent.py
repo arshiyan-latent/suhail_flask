@@ -15,12 +15,28 @@ from dotenv import load_dotenv
 load_dotenv()
 # loading secret keys
 openai_key = os.getenv("OPENAI_API_KEY")
-
+print(openai_key)
 # setting up LLM
 llm = ChatOpenAI(model='gpt-4o',temperature=0.2,api_key=openai_key)
 
 # config checkpoint
+
+# db_password = os.getenv('POSTGRE_PASSWORD')
+# DATABASE_URL=f'postgresql://postgres:{db_password}@db.gvuxfdhghxrxlyjnlfly.supabase.co:6543/postgres'
+# print(DATABASE_URL)
+
+# connection_kwargs = {
+#     "autocommit": True,
+#     "prepare_threshold": 0,
+# }
+
+# conn = Connection.connect(DATABASE_URL, **connection_kwargs)
+#memory = PostgresSaver(conn)
+
+
+
 conn = sqlite3.connect("database/suhail_database.db",check_same_thread=False)
+
 memory = SqliteSaver(conn)
 
 def get_supervisor_prompt(user_id=None):

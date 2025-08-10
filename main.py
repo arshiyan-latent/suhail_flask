@@ -5,9 +5,14 @@ from agents.summary.summary_agent import extract_transcript, generate_summary
 from agents.manager_agent import create_manager_agent
 from agents.general_agent import supervisor_agent_general
 from dotenv import load_dotenv
-import os
+import os, tempfile, time, json, subprocess
 # import logging
 from langchain_openai import ChatOpenAI
+from pathlib import Path
+from werkzeug.utils import secure_filename
+from flask import send_file
+from openai import OpenAI
+client = OpenAI()
 
 # Set logging level to suppress langgraph debug messages
 # logging.getLogger('langgraph').setLevel(logging.ERROR)
@@ -18,9 +23,15 @@ load_dotenv()
 
 from flask import Flask, render_template, request, redirect, url_for, flash,jsonify
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
-from models import db, User, ChatSession, ChatMessage, ClientSummary, TeamNotification, NotificationRead
+from models import db, User, ChatSession, ChatMessage, ClientSummary, TeamNotification, NotificationRead, Transcript
 from datetime import datetime
 import uuid
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.pagesizes import LETTER
+from reportlab.lib.units import inch
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv("FLASK_SECRET_KEY")
@@ -33,8 +44,65 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+def _wrap_lines(line, max_width, canv, font_name="Helvetica", font_size=10):
+    """Yield wrapped substrings that fit max_width."""
+    words = line.split(" ")
+    out, cur = [], ""
+    for w in words:
+        test = (cur + " " + w).strip()
+        if pdfmetrics.stringWidth(test, font_name, font_size) <= max_width:
+            cur = test
+        else:
+            if cur:
+                out.append(cur)
+            cur = w
+    if cur:
+        out.append(cur)
+    return out
+
+def write_transcript_pdf(pdf_path: str, title: str, pretty_text: str, meta: dict | None = None):
+    c = canvas.Canvas(pdf_path, pagesize=LETTER)
+    width, height = LETTER
+    lm = rm = 0.75 * inch
+    tm = bm = 0.75 * inch
+    y = height - tm
+
+    # Title
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(lm, y, title)
+    y -= 0.28 * inch
+
+    # Meta (optional)
+    c.setFont("Helvetica", 9)
+    if meta:
+        for k, v in meta.items():
+            c.drawString(lm, y, f"{k}: {v}")
+            y -= 12
+        y -= 6
+
+    # Body
+    c.setFont("Helvetica", 10)
+    maxw = width - lm - rm
+    line_h = 14
+    for line in pretty_text.splitlines():
+        chunks = _wrap_lines(line, maxw, c)
+        for chunk in chunks:
+            if y <= bm:
+                c.showPage()
+                y = height - tm
+                c.setFont("Helvetica", 10)
+            c.drawString(lm, y, chunk)
+            y -= line_h
+        # paragraph spacing
+        if not chunks:
+            y -= line_h
+    c.save()
+
+
 # Initialize manager_agent as None, will be created when needed
 manager_agent = None
+
+
 
 def get_manager_agent():
     global manager_agent
@@ -43,6 +111,96 @@ def get_manager_agent():
         with app.app_context():
             manager_agent = create_manager_agent(llm=llm).compile()
     return manager_agent
+
+# --- helper: optional diarization via pyannote (set HUGGINGFACE_TOKEN) ---
+_DIAR_PIPELINE = None  # cache
+
+def _to_wav_mono16k(src_path: str) -> str:
+    """Return a temp WAV (mono, 16 kHz) converted from any input using ffmpeg."""
+    tmp_wav = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+    tmp_wav.close()
+    cmd = [
+        "ffmpeg", "-y", "-i", src_path,
+        "-ac", "1",        # mono
+        "-ar", "16000",    # 16 kHz
+        "-f", "wav", tmp_wav.name
+    ]
+    try:
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        return tmp_wav.name
+    except Exception as e:
+        # If ffmpeg missing or conversion failed
+        try:
+            os.unlink(tmp_wav.name)
+        except Exception:
+            pass
+        print("[diarize] ffmpeg conversion failed:", repr(e))
+        return None
+
+def diarize_file(audio_path: str):
+    token = os.getenv("HUGGINGFACE_TOKEN")
+    if not token:
+        print("[diarize] HUGGINGFACE_TOKEN not set; skipping diarization.")
+        return None
+
+    try:
+        from pyannote.audio import Pipeline
+    except Exception as e:
+        print("[diarize] pyannote import failed:", repr(e))
+        return None
+
+    # Convert to WAV mono/16k so libsndfile can read it
+    wav_path = _to_wav_mono16k(audio_path)
+    if not wav_path:
+        return None
+
+    global _DIAR_PIPELINE
+    try:
+        if _DIAR_PIPELINE is None:
+            _DIAR_PIPELINE = Pipeline.from_pretrained(
+                "pyannote/speaker-diarization-3.1",
+                use_auth_token=token
+            )
+
+        result = _DIAR_PIPELINE(wav_path)
+        segs = []
+        for turn, _, speaker in result.itertracks(yield_label=True):
+            segs.append({
+                "start": float(turn.start),
+                "end": float(turn.end),
+                "speaker": str(speaker),
+            })
+        return segs
+    except Exception as e:
+        print("[diarize] failed:", repr(e))
+        return None
+    finally:
+        try:
+            os.unlink(wav_path)
+        except Exception:
+            pass
+
+# --- helper: map transcript segments -> speakers by time overlap ---
+def assign_speakers(transcript_segments, diar_segments):
+    if not diar_segments:
+        return [{"speaker": "Speaker 1", **s} for s in transcript_segments]
+
+    def overlap(a_start, a_end, b_start, b_end):
+        return max(0.0, min(a_end, b_end) - max(a_start, b_start))
+
+    labeled = []
+    for seg in transcript_segments:
+        best = None
+        best_ov = 0.0
+        for d in diar_segments:
+            ov = overlap(seg["start"], seg["end"], d["start"], d["end"])
+            if ov > best_ov:
+                best_ov = ov
+                best = d
+        speaker = (best["speaker"] if best else "Speaker 1")
+        labeled.append({"speaker": speaker, **seg})
+    return labeled
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -627,9 +785,169 @@ def get_chat_summary():
         print(f"Error generating summary: {e}")
         return jsonify({'error': 'Failed to generate summary'}), 500
 
+@app.route('/api/transcribe', methods=['POST'])
+@login_required
+def transcribe_audio():
+    try:
+        title = request.form.get('title', 'Live Meeting')
+
+        if 'audio' not in request.files:
+            return jsonify({'error': 'No audio file provided'}), 400
+
+        audio_file = request.files['audio']
+        filename = secure_filename(audio_file.filename or 'meeting.webm')
+
+        # Save to temp
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp:
+            tmp_path = tmp.name
+            audio_file.save(tmp_path)
+
+        # Choose model & response format
+        model_name = os.getenv("STT_MODEL", "whisper-1")
+        use_verbose = ("whisper" in model_name)
+        resp_format = "verbose_json" if use_verbose else "json"
+
+        # OpenAI call
+        with open(tmp_path, "rb") as f:
+            resp = client.audio.transcriptions.create(
+                model=model_name,
+                file=f,
+                response_format=resp_format
+            )
+
+        # Parse via dict
+        rd = resp.model_dump() if hasattr(resp, "model_dump") else {}
+        segments = []
+        if use_verbose and isinstance(rd.get("segments"), list):
+            for s in rd["segments"]:
+                segments.append({
+                    "start": float(s.get("start") or 0.0),
+                    "end": float(s.get("end") or 0.0),
+                    "text": (s.get("text") or "").strip()
+                })
+        else:
+            text = (rd.get("text") or "").strip()
+            segments = [{"start": 0.0, "end": 0.0, "text": text}]
+
+        # Diarization only if timestamps exist
+        if use_verbose:
+            diar_segments = diarize_file(tmp_path)  # returns None if disabled
+            labeled = assign_speakers(segments, diar_segments)
+        else:
+            labeled = [{"speaker": "Speaker 1", **s} for s in segments]
+
+        # Normalize speakers
+        speaker_map, next_idx = {}, 1
+        for it in labeled:
+            key = it["speaker"]
+            if key not in speaker_map:
+                speaker_map[key] = f"Speaker {next_idx}"
+                next_idx += 1
+            it["speaker"] = speaker_map[key]
+        num_speakers = max(1, len(speaker_map))
+
+        # Pretty text
+        def hhmmss(t):
+            t = max(0.0, float(t or 0.0))
+            h = int(t // 3600); m = int((t % 3600) // 60); s = int(t % 60)
+            return f"{h:02d}:{m:02d}:{s:02d}"
+
+        lines = [f"[{hhmmss(seg['start'])}–{hhmmss(seg['end'])}] {seg['speaker']}: {seg['text']}"
+                 for seg in labeled]
+        pretty_text = "\n".join(lines).strip()
+
+        # Save PDF
+        base_dir = Path("uploads") / "transcripts" / str(current_user.id)
+        base_dir.mkdir(parents=True, exist_ok=True)
+        stamp = int(time.time())
+        safe_title = "".join(c for c in title if c.isalnum() or c in (" ", "_", "-")).rstrip() or "meeting"
+        pdf_path = base_dir / f"{stamp}_{safe_title}.pdf"
+
+        write_transcript_pdf(
+            str(pdf_path),
+            title=title,
+            pretty_text=pretty_text,
+            meta={"Model": model_name, "Speakers": str(num_speakers)}
+        )
+
+        # DB row (store preview text & file path)
+        transcript = Transcript(
+            user_id=current_user.id,
+            chat_id=None,
+            title=title,
+            text=pretty_text  # used for sidebar preview
+        )
+        try:
+            transcript.file_path = str(pdf_path)
+            transcript.speakers_count = num_speakers
+            transcript.language = rd.get("language")
+        except Exception:
+            pass
+
+        db.session.add(transcript)
+        db.session.commit()
+
+        # Cleanup temp
+        try: os.remove(tmp_path)
+        except Exception: pass
+
+        return jsonify({
+            "success": True,
+            "transcript_id": transcript.id,
+            "title": title,
+            "file_url": url_for('download_transcript', transcript_id=transcript.id),
+            "speakers": num_speakers
+        })
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+    
+@app.route('/v1/transcripts', methods=['GET'])
+@login_required
+def list_transcripts():
+    rows = Transcript.query.filter_by(user_id=current_user.id).order_by(Transcript.created_at.desc()).all()
+    out = []
+    for t in rows:
+        out.append({
+            "id": t.id,
+            "title": t.title,
+            "created_at": t.created_at.isoformat(),
+            "preview": (t.text[:200] + '...') if len(t.text) > 200 else t.text,
+            "file_url": url_for('download_transcript', transcript_id=t.id)
+        })
+    return jsonify(out)
+
+@app.route('/v1/transcripts/<int:transcript_id>/download', methods=['GET'])
+@login_required
+def download_transcript(transcript_id):
+    t = Transcript.query.filter_by(id=transcript_id, user_id=current_user.id).first()
+    if not t or not t.file_path or not os.path.exists(t.file_path):
+        return jsonify({"error": "Not found"}), 404
+    return send_file(t.file_path, as_attachment=True, download_name=os.path.basename(t.file_path))
+
+@app.route('/v1/transcripts/<int:transcript_id>', methods=['DELETE'])
+@login_required
+def delete_transcript(transcript_id):
+    t = Transcript.query.filter_by(id=transcript_id, user_id=current_user.id).first()
+    if not t:
+        return jsonify({"error": "Not found"}), 404
+    # remove file
+    try:
+        if t.file_path and os.path.exists(t.file_path):
+            os.remove(t.file_path)
+    except Exception as e:
+        print("file delete warning:", e)
+    db.session.delete(t)
+    db.session.commit()
+    return jsonify({"success": True})
+
+
 if __name__ == '__main__':
     with app.app_context():
         # Check if we need to add manager_id column
+        
         inspector = db.inspect(db.engine)
         existing_columns = [column['name'] for column in inspector.get_columns('user')]
         
@@ -639,8 +957,5 @@ if __name__ == '__main__':
                 conn.execute(db.text("ALTER TABLE user ADD COLUMN manager_id INTEGER"))
                 conn.commit()
                 print("Added manager_id column to user table")
-        
         db.create_all()
-    app.run(host='0.0.0.0', port=5000,debug=True)
-
-
+    app.run(host='0.0.0.0', port=5000, debug=True)
