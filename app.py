@@ -20,7 +20,7 @@ client = OpenAI()
 
 load_dotenv()
 
-
+import io
 from flask import Flask, render_template, request, redirect, url_for, flash,jsonify
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from models import db, User, ChatSession, ChatMessage, ClientSummary, TeamNotification, NotificationRead, Transcript
@@ -31,7 +31,15 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.units import inch
-
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas  # kept (fallback)
+    from reportlab.lib.units import mm
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib import colors
+except Exception:
+    A4 = None
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv("FLASK_SECRET_KEY")
@@ -943,6 +951,247 @@ def delete_transcript(transcript_id):
     db.session.commit()
     return jsonify({"success": True})
 
+@app.route('/v1/chat/report', methods=['POST'])
+@login_required
+def generate_chat_report():
+    data = request.get_json()
+    chat_id = data.get('chat_id') if data else None
+    output_format = (data.get('format') if data else 'markdown') or 'markdown'
+    if not chat_id:
+        return jsonify({'error': 'Chat ID is required'}), 400
+
+    # Verify ownership
+    chat_session = ChatSession.query.filter_by(id=chat_id, user_id=current_user.id).first()
+    if not chat_session:
+        return jsonify({'error': 'Chat not found'}), 404
+
+    messages = ChatMessage.query.filter_by(session_id=chat_id).order_by(ChatMessage.timestamp).all()
+    if not messages:
+        return jsonify({'error': 'No messages in chat'}), 404
+
+    # Find the most relevant bot message containing benchmark content
+    target_bot_message = None
+    for msg in reversed(messages):
+        if msg.sender == 'bot' and (
+            'Benchmark Comparison Table' in msg.message or
+            'Side-by-side Comparison Table' in msg.message or
+            'How to Pitch It' in msg.message
+        ):
+            target_bot_message = msg.message
+            break
+    if not target_bot_message:
+        # fallback to last bot message
+        for msg in reversed(messages):
+            if msg.sender == 'bot':
+                target_bot_message = msg.message
+                break
+
+    if not target_bot_message:
+        target_bot_message = 'No bot analytical response available.'
+    generated_at = datetime.utcnow().isoformat() + 'Z'
+    client_name = chat_session.client_name or 'General'
+    if output_format.lower() == 'pdf' and A4 is not None:
+        # Enhanced PDF rendering using platypus (tables + headings) with fallback
+        buffer = io.BytesIO()
+        # Attempt rich layout; fallback to plain text if imports failed
+        try:
+            styles = getSampleStyleSheet()
+            # Custom tweaks
+            styles.add(ParagraphStyle(name='Small', parent=styles['BodyText'], fontSize=9, leading=11))
+            heading_map = {
+                1: styles['Heading1'],
+                2: styles['Heading2'],
+                3: styles['Heading3']
+            }
+            story = []
+            # Title block
+            story.append(Paragraph('Chat Report', styles['Heading1']))
+            meta_html = f"<b>Client:</b> {client_name}<br/><b>Chat ID:</b> {chat_id}<br/><b>Generated (UTC):</b> {generated_at}".replace('\n',' ')
+            story.append(Paragraph(meta_html, styles['Small']))
+            story.append(Spacer(1, 8))
+            story.append(Paragraph('Analytical Output', styles['Heading2']))
+            story.append(Spacer(1, 4))
+            # Build lines list from analytical markdown
+            lines = target_bot_message.splitlines()
+            i = 0
+            while i < len(lines):
+                raw_line = lines[i]
+                line = raw_line.rstrip('\n')
+                stripped = line.lstrip()
+                # Utility to clean markdown emphases in cells
+                import re as _cell_re
+                def _clean_cell(txt: str):
+                    txt = txt.strip()
+                    # Remove surrounding ** ** or __ __
+                    txt = _cell_re.sub(r'^\*\*(.+?)\*\*$', r'\1', txt)
+                    txt = _cell_re.sub(r'^__(.+?)__$', r'\1', txt)
+                    return txt
+                # Pseudo-table (bold tokens without pipes) detection (allow leading spaces)
+                if stripped.startswith('**') and stripped.count('**') >= 4 and '|' not in stripped:
+                    import re
+                    header_tokens = re.findall(r'\*\*(.+?)\*\*', stripped)
+                    header_tokens = [_clean_cell(h) for h in header_tokens]
+                    if header_tokens:
+                        i += 1
+                        row_data = []
+                        while i < len(lines):
+                            row_line = lines[i].rstrip('\n')
+                            row_stripped = row_line.lstrip()
+                            if not (row_stripped.startswith('**') and row_stripped.count('**') >= 2):
+                                break
+                            cells = re.findall(r'\*\*(.+?)\*\*', row_stripped)
+                            tail = row_stripped.split('**')[-1].strip()
+                            if tail:
+                                tail_parts = tail.split()
+                                cells.extend(tail_parts)
+                            if len(cells) < len(header_tokens):
+                                cells += [''] * (len(header_tokens) - len(cells))
+                            # Clean each cell
+                            cells = [_clean_cell(c) for c in cells]
+                            row_data.append(cells[:len(header_tokens)])
+                            i += 1
+                        if row_data:
+                            tbl_rows = [header_tokens] + row_data
+                            tbl = Table(tbl_rows, hAlign='LEFT')
+                            tbl_style = TableStyle([
+                                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#222222')),
+                                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                                ('FONTSIZE', (0,0), (-1,0), 9),
+                                ('BACKGROUND', (0,1), (-1,-1), colors.whitesmoke),
+                                ('TEXTCOLOR', (0,1), (-1,-1), colors.black),
+                                ('FONTSIZE', (0,1), (-1,-1), 8),
+                                ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
+                                ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.whitesmoke, colors.HexColor('#eeeeee')])
+                            ])
+                            tbl.setStyle(tbl_style)
+                            story.append(tbl)
+                            story.append(Spacer(1, 10))
+                            continue
+                # Skip trivial
+                if not stripped:
+                    story.append(Spacer(1, 6))
+                    i += 1
+                    continue
+                # Headings
+                if stripped.startswith('#'):
+                    hashes = len(stripped) - len(stripped.lstrip('#'))
+                    text = stripped[hashes:].strip()
+                    level = min(hashes,3)
+                    story.append(Paragraph(text, heading_map.get(level, styles['Heading3'])))
+                    i += 1
+                    continue
+                # Table detection (pipe tables)
+                def is_table_line(l):
+                    return '|' in l and l.count('|') >= 2
+                if is_table_line(stripped):
+                    table_block = []
+                    while i < len(lines) and is_table_line(lines[i].strip()):
+                        table_block.append(lines[i].strip())
+                        i += 1
+                    raw_rows = [r.strip('|') for r in table_block]
+                    rows = []
+                    for r in raw_rows:
+                        cells = [c.strip() for c in r.split('|')]
+                        if all(set(c.replace('-',''))==set() for c in cells):
+                            continue
+                        cells = [_clean_cell(c) for c in cells]
+                        rows.append(cells)
+                    if rows:
+                        tbl = Table(rows, hAlign='LEFT')
+                        tbl_style = TableStyle([
+                            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#333333')),
+                            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                            ('FONTSIZE', (0,0), (-1,0), 9),
+                            ('BACKGROUND', (0,1), (-1,-1), colors.HexColor('#f5f5f5')),
+                            ('TEXTCOLOR', (0,1), (-1,-1), colors.black),
+                            ('FONTSIZE', (0,1), (-1,-1), 8),
+                            ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
+                            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.whitesmoke, colors.HexColor('#eeeeee')])
+                        ])
+                        tbl.setStyle(tbl_style)
+                        story.append(tbl)
+                        story.append(Spacer(1, 10))
+                    continue
+                # Bullet list
+                if stripped.startswith(('*','-')) and len(stripped.split())>1:
+                    bullets = []
+                    while i < len(lines) and lines[i].lstrip().startswith(('*','-')):
+                        bullets.append(lines[i].lstrip()[1:].strip())
+                        i += 1
+                    bullet_html = '<br/>'.join([f'• {b}' for b in bullets])
+                    story.append(Paragraph(bullet_html, styles['Small']))
+                    story.append(Spacer(1,6))
+                    continue
+                # Paragraph fallback with proper bold conversion
+                import re as _re
+                def boldify(s):
+                    s2 = _re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', s)
+                    s2 = _re.sub(r'^\*\*(.+?)\*\*$', r'<b>\1</b>', s2)
+                    return s2.replace('**','')
+                story.append(Paragraph(boldify(stripped), styles['BodyText']))
+                story.append(Spacer(1,4))
+                i += 1
+            story.append(Spacer(1,12))
+            story.append(Paragraph('<i>End of Report</i>', styles['Small']))
+            doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=18*mm, rightMargin=18*mm, topMargin=18*mm, bottomMargin=18*mm)
+            doc.build(story)
+            buffer.seek(0)
+            return send_file(
+                buffer,
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name=f'report_{chat_id}.pdf'
+            )
+        except Exception:
+            # Fallback to previous plain text canvas approach
+            buffer = io.BytesIO()
+            c = canvas.Canvas(buffer, pagesize=A4)
+            width, height = A4
+            margin = 20 * mm
+            text_obj = c.beginText(margin, height - margin)
+            text_obj.setFont('Helvetica-Bold', 14)
+            text_obj.textLine('Chat Report')
+            text_obj.setFont('Helvetica', 10)
+            meta_lines = [
+                f'Client: {client_name}', f'Chat ID: {chat_id}', f'Generated (UTC): {generated_at}', '', 'Analytical Output:', ''
+            ]
+            for line in meta_lines:
+                text_obj.textLine(line)
+            import textwrap
+            wrap_width = 100
+            for raw_line in target_bot_message.splitlines():
+                if not raw_line.strip():
+                    text_obj.textLine('')
+                    continue
+                for wrapped in textwrap.wrap(raw_line, wrap_width):
+                    if text_obj.getY() < 40 * mm:
+                        c.drawText(text_obj)
+                        c.showPage()
+                        text_obj = c.beginText(margin, height - margin)
+                        text_obj.setFont('Helvetica', 10)
+                    text_obj.textLine(wrapped)
+            c.drawText(text_obj)
+            c.showPage()
+            c.save()
+            buffer.seek(0)
+            return send_file(
+                buffer,
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name=f'report_{chat_id}.pdf'
+            )
+    # default markdown
+    report_md = f"""# Chat Report\n\nClient: {client_name}\nChat ID: {chat_id}\nGenerated At (UTC): {generated_at}\n\n## Analytical Output\n\n{target_bot_message}\n\n---\n*End of Report*\n"""
+    md_bytes = report_md.encode('utf-8')
+    return send_file(
+        io.BytesIO(md_bytes),
+        mimetype='text/markdown; charset=utf-8',
+        as_attachment=True,
+        download_name=f'report_{chat_id}.md'
+    )
+# ...existing code...
 
 if __name__ == '__main__':
     with app.app_context():

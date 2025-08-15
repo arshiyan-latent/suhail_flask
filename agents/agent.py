@@ -155,7 +155,7 @@ For these inputs, request them from the user in a friendly manner and dont provi
         "Fallback Package": "Only shown if needed or for negotiation prep",
         "Package_Hierarchy": ["Diamond", "Gold", "Silver", "Bronze", "Basic"],
         "Comparison_Rules": [
-          "Show requested package even if over budget",
+          "ALWAYS show requested package even if over budget",
           "MUST include fallback and/or alternative package"
         ],
         "Formatting": [
@@ -165,10 +165,11 @@ For these inputs, request them from the user in a friendly manner and dont provi
         ]
       }}
     }},
+    For output , make sure all values are CONSISTENT, dont have any contradictions.
     "output_format": {{
       "sections": [
-        "Markdown Table: Benchmark Comparison Table",
-        "Markdown Table: Side-by-side Comparison Table",
+        "Markdown Table: Benchmark Comparison Table: Requested package vs Regional Average for number of lives, offered budger per life and target loss ratio for requested package",
+        "Markdown Table: Side-by-side Comparison Table: Requested package vs fallback and/ or alternative package. Never display N/A.",
         "How to pitch it"
       ],
       "comparison_table_columns": [

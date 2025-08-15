@@ -293,6 +293,13 @@
               </svg>
               <span>Summary</span>
             </button>
+            <!-- Report Button -->
+            <button type="button" class="w-full px-3 py-2 text-left text-white hover:bg-white/10 transition-all flex items-center space-x-2 text-sm" onclick="handleToolAction('report')">
+              <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+              </svg>
+              <span>Report</span>
+            </button>
           </div>
         </div>
       </div>
@@ -981,6 +988,9 @@
         console.log('Generating summary for this chat');
         generateSummary();
         break;
+      case 'report':
+        generateReport();
+        break;
       default:
         console.log('Unknown tool action:', action);
     }
@@ -1026,6 +1036,51 @@
     } catch (error) {
       console.error('Error generating summary:', error);
       renderMarkdownBubble("**Error:** Unable to generate summary. " + error.message, "w-full bg-red-600 px-4 py-2 rounded-xl self-start");
+    }
+  }
+
+  // Report generation function
+  async function generateReport() {
+    if (!currentChatId) {
+      alert('Please select a chat to generate a report.');
+      return;
+    }
+    const format = confirm('Download as PDF? Click OK for PDF, Cancel for Markdown.') ? 'pdf' : 'markdown';
+    const loadingBubble = document.createElement('div');
+    loadingBubble.className = "w-full bg-green-600/20 border border-green-400 px-4 py-2 rounded-xl self-start flex items-center space-x-2";
+    loadingBubble.innerHTML = `
+      <svg class="w-4 h-4 animate-spin text-green-400" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+      </svg>
+      <span class="text-green-400 text-xs">Generating report...</span>`;
+    chatWindow.appendChild(loadingBubble);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+    try {
+      const response = await fetch('/v1/chat/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: currentChatId, format })
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(()=>({error:'Failed'}));
+        throw new Error(data.error || 'Report generation failed');
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `report_${currentChatId}.${format === 'pdf' ? 'pdf' : 'md'}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      loadingBubble.remove();
+      renderMarkdownBubble(`**✅ Report (${format.toUpperCase()}) generated and downloaded.**`, 'w-full bg-green-600/20 border border-green-400 px-4 py-2 rounded-xl self-start');
+    } catch (err) {
+      console.error(err);
+      loadingBubble.remove();
+      renderMarkdownBubble('**Error:** '+ err.message, 'w-full bg-red-600 px-4 py-2 rounded-xl self-start');
     }
   }
 

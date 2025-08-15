@@ -23,8 +23,7 @@ def load_historical_data():
 
 df = load_historical_data()
 
-# Below is the rules covered till 10th row in demo features
-
+# Below is the rules covered till 10th row in demo features..
 '''
 Some rules for the spreadsheet agent:
 - Valid Range = Benchmark lives ± 15%
@@ -122,8 +121,8 @@ def assess_new_offer(
     # --- Input-derived Values ---
     offered_budget = lives * budget_per_life  # Total budget for all lives
     offered_budget_per_life = budget_per_life  # Budget per life
-    true_cost = budget_per_life / target_lr  # Calculate per life first
-    target_price = true_cost * 1.05  # Add 5% contingency to the true cost (per life)
+    # true_cost = budget_per_life / target_lr  # Calculate per life first
+    # target_price = true_cost * 1.05  # Add 5% contingency to the true cost (per life)
 
     # --- Rule 1: Valid Range Check ---
     valid_range = abs(lives - benchmark_lives) / benchmark_lives <= 0.15
@@ -134,10 +133,21 @@ def assess_new_offer(
     if claims_input != "i don't know":
         try:
             claims_per_life = float(claims_input)
-            expected_lr = claims_per_life / budget_per_life
+            # expected_lr = claims_per_life / budget_per_life
         except Exception:
-            expected_lr = None
+            #expected_lr = None
+            claims_per_life = None
 
+    if claims_per_life is None:
+        claims_per_life = avg_claims_per_life  # package/region-specific
+
+    true_cost = None
+    target_price = None
+    expected_lr = None
+    if (claims_per_life is not None) and (target_lr > 0):
+        true_cost = claims_per_life / target_lr
+        target_price = true_cost * 1.05
+        expected_lr = claims_per_life / target_price  # compare to recommended price
     # --- Sale Probability Calculation ---
     base_prob = (0.6 * logistic_output) + (0.4 * similarity_score) * adjustment
     sale_probability = base_prob
@@ -150,7 +160,7 @@ def assess_new_offer(
         variance = (target_price - offered_budget_per_life) / max(offered_budget_per_life, 1e-9)
         penalty = max(0.0, 1 - variance)
         sale_probability *= penalty  # Rule 7
-
+  
     # Calculate alternative package if current package exceeds budget
     alternative_results = None
     fallback_results = None
@@ -171,9 +181,12 @@ def assess_new_offer(
                 alt_matches = df[df[package_col].str.lower().str.contains(alt_package.lower(), na=False)]
                 if not alt_matches.empty:
                     alt_claims_per_life = (alt_matches[claims_col].sum() / alt_matches[lives_col].sum()) if claims_col else None
-                    alt_true_cost = budget_per_life / target_lr
-                    alt_target_price = alt_true_cost * 1.05
-                    alt_expected_lr = alt_claims_per_life / budget_per_life if alt_claims_per_life else None
+                    alt_true_cost = alt_target_price = alt_expected_lr = None
+                    if (alt_claims_per_life is not None) and (target_lr > 0):
+                        alt_true_cost    = alt_claims_per_life / target_lr
+                        alt_target_price = alt_true_cost * 1.05
+                        alt_expected_lr  = alt_claims_per_life / alt_target_price
+
                     alt_sale_prob = base_prob
                     if alt_expected_lr and alt_expected_lr <= target_lr:
                         alt_sale_prob *= 1.05
@@ -199,9 +212,12 @@ def assess_new_offer(
                         basic_matches = df[df[package_col].str.lower().str.contains("basic", na=False)]
                         if not basic_matches.empty:
                             basic_claims_per_life = (basic_matches[claims_col].sum() / basic_matches[lives_col].sum()) if claims_col else None
-                            basic_true_cost = budget_per_life / target_lr
-                            basic_target_price = basic_true_cost * 1.05
-                            basic_expected_lr = basic_claims_per_life / budget_per_life if basic_claims_per_life else None
+                            basic_true_cost = basic_target_price = basic_expected_lr = None
+                            if (basic_claims_per_life is not None) and (target_lr > 0):
+                                basic_true_cost    = basic_claims_per_life / target_lr
+                                basic_target_price = basic_true_cost * 1.05
+                                basic_expected_lr  = basic_claims_per_life / basic_target_price
+
                             basic_sale_prob = base_prob
                             if basic_expected_lr and basic_expected_lr <= target_lr:
                                 basic_sale_prob *= 1.05
@@ -218,7 +234,6 @@ def assess_new_offer(
                             print(f"Fits budget? {basic_target_price <= offered_budget_per_life}")
             except Exception as e:
                 print(f"Error calculating alternative package: {str(e)}")
-
     # --- Result Summary ---
     print("\n=== Generating Comparison Table ===")
     print(f"Number of packages to display: {1 + bool(alternative_results) + bool(fallback_results)}")
@@ -280,8 +295,8 @@ def assess_new_offer(
         result += "📉 Target price exceeds budget — recommend **downgrading package**.\n"
 
     result += f"\n--- 🧠 Sales Forecast ---\n"
-    result += f"• Final Sale Probability: {sale_probability:.2%} (after adjustments)\n"
-
+    result += f"• Final Sale Probability: {sale_probability:.2%} (after adjustments)\n" 
+    
     response = {
         "benchmark_lives": round(benchmark_lives, 2),
         "valid_range": valid_range,
@@ -299,7 +314,7 @@ def assess_new_offer(
         "final_probability": round(sale_probability, 4),
         # Normalize fallback detection
         "used_claims_fallback": claims_input == "i don't know",
-        "comparison_table": result,
+        # "comparison_table": result,
         "packages": [
             {
                 "name": package,
@@ -310,7 +325,7 @@ def assess_new_offer(
             }
         ]
     }
-
+   
     if alternative_results:
         response["packages"].append({
             "name": alternative_results["package"],
@@ -328,7 +343,7 @@ def assess_new_offer(
             "expected_lr": round(fallback_results["expected_lr"], 4) if fallback_results["expected_lr"] is not None else None,
             "sale_probability": round(fallback_results["sale_probability"], 4)
         })
-
+    
     return response
 
 
