@@ -126,6 +126,13 @@
         <li class="p-2 rounded bg-white/10 hover:bg-white/20 cursor-pointer">
             <a href="/manager/dashboard">Manager's Dashboard</a>
         </li>
+        {% elif current_user.role == 'smeleader' %}
+        <li class="p-2 rounded bg-white/10 hover:bg-white/20 cursor-pointer">
+            <a href="/smeleader/dashboard">SME Leader Dashboard</a>
+        </li>
+        <li class="p-2 rounded bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 cursor-pointer transition-all" onclick="createSMELeaderChat()">
+            <span class="text-purple-200">🏢 SME Strategic Chat</span>
+        </li>
 
         {% endif %}
         <!-- <li class="p-2 rounded bg-white/10 hover:bg-white/20 cursor-pointer">General Chat</li>
@@ -133,8 +140,8 @@
       </ul>
     </div>
 
-    <!-- Clients - Only show for non-manager users -->
-    {% if current_user.role != 'manager' %}
+    <!-- Clients - Show for all users except managers -->
+    {% if current_user.role not in ['manager'] %}
     <div>
       <div class="flex items-center justify-between mb-2">
         <h3 class="text-xs font-semibold text-white/70">Clients</h3>
@@ -216,10 +223,10 @@
       
       <div class="text-lg font-medium truncate">Suhail</div>
       <div class="flex items-center space-x-4">
-        {% if current_user.role == 'salesagent' %}
+        {% if current_user.role in ['salesagent', 'smeleader'] %}
         {% include 'components/notification_button.html' %}
         {% endif %}
-        {% if current_user.role == 'manager' %}
+        {% if current_user.role in ['manager', 'smeleader'] %}
         <div class="relative" id="teamMembersDropdown">
           <button class="px-3 py-1 bg-white/20 rounded-lg text-white hover:bg-white/30 transition-all text-sm flex items-center space-x-2">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1191,6 +1198,38 @@
 
   // load on page ready:
   loadTranscripts();
+
+  // SME Leader Chat Function
+  async function createSMELeaderChat() {
+    try {
+      const response = await fetch('/v1/chat/newchat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: parseInt(document.getElementById('user_id').textContent),
+          title: 'SME Strategic Business Chat'
+        })
+      });
+      
+      const data = await response.json();
+      if (data.id) {
+        loadChat(data.id);
+        // Add a welcome message for SME Leaders
+        setTimeout(() => {
+          const chatTitle = document.getElementById('chatTitle');
+          if (chatTitle) {
+            chatTitle.textContent = 'SME Strategic Business Chat';
+          }
+          addMessage('Welcome to the SME Leader Strategic Business Chat. I can assist you with:\n\n• Strategic business planning\n• Manager oversight and guidance\n• Market analysis and SME sector insights\n• Cross-team coordination\n• Business growth strategies\n\nHow can I help you today?', 'bot');
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Error creating SME Leader chat:', error);
+      alert('Failed to create SME Leader chat. Please try again.');
+    }
+  }
 </script>
 
 </body>

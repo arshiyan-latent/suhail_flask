@@ -26,6 +26,7 @@ from flask_login import LoginManager, login_user, login_required, logout_user, c
 from models import db, User, ChatSession, ChatMessage, ClientSummary, TeamNotification, NotificationRead, Transcript
 from datetime import datetime
 import uuid
+import pandas as pd
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -227,7 +228,18 @@ def role_required(role):
         return decorated_view
     return wrapper
 
-#helper function to get clients
+# Management roles access decorator (manager and SME leader)
+def management_required(f):
+    @login_required
+    def decorated_view(*args, **kwargs):
+        if current_user.role not in ['manager', 'smeleader']:
+            flash('Access denied: You do not have permission to access this page.')
+            return redirect(url_for('home'))
+        return f(*args, **kwargs)
+    decorated_view.__name__ = f.__name__
+    return decorated_view
+
+# Management roles access decorator (manager and SME leader)
 
 def get_clients_for_user(user_id):
     """Helper function """
@@ -254,9 +266,9 @@ def home():
     .all()
     )
     
-    # Get sales agents if current user is a manager
+    # Get sales agents if current user is a manager or SME leader
     sales_agents = None
-    if current_user.role == 'manager':
+    if current_user.role in ['manager', 'smeleader']:
         sales_agents = []
         for agent in User.query.filter_by(role='salesagent').all():
             summaries = ClientSummary.query.filter_by(user_id=agent.id).all()
@@ -278,7 +290,7 @@ def admin():
 from dashboard.stats import get_sales_agents_client_stats, get_total_clients, get_dashboard_summary, get_seller_productivity, get_predictions_data
 
 @app.route('/api/team-message', methods=['POST'])
-@role_required('manager')
+@management_required
 def create_team_message():
     data = request.json
     message = data.get('message')
@@ -304,10 +316,10 @@ def create_team_message():
 @login_required
 def get_unread_notifications_endpoint():
     from agents.notification_helper import get_unread_notifications
-    print(f"Fetching unread notifications for user {current_user.id}")
+    # print(f"Fetching unread notifications for user {current_user.id}")
     
     notifications = get_unread_notifications(current_user.id)
-    print(f"Found {len(notifications)} unread notifications")
+    # print(f"Found {len(notifications)} unread notifications")
     
     return jsonify(notifications)
 
@@ -328,7 +340,7 @@ def mark_notification_read():
     return jsonify({'success': True})
 
 @app.route('/manager/dashboard')
-@role_required('manager')
+@management_required
 def manager_dashboard():
     agent_stats = get_sales_agents_client_stats()
     dashboard_summary = get_dashboard_summary()
@@ -340,14 +352,33 @@ def manager_dashboard():
                          productivity_data=productivity_data,
                          predictions_data=predictions_data)
 
+@app.route('/smeleader/dashboard')
+@role_required('smeleader')
+def smeleader_dashboard():
+    # SME Leaders get access to manager stats plus manager oversight
+    agent_stats = get_sales_agents_client_stats()
+    dashboard_summary = get_dashboard_summary()
+    productivity_data = get_seller_productivity()
+    predictions_data = get_predictions_data()
+    
+    # Get all managers for SME Leader oversight
+    managers = User.query.filter_by(role='manager').all()
+    
+    return render_template('smeleader_dashboard.html', 
+                         agent_stats=agent_stats,
+                         dashboard_summary=dashboard_summary,
+                         productivity_data=productivity_data,
+                         predictions_data=predictions_data,
+                         managers=managers)
+
 @app.route('/manager/team')
-@role_required('manager')
+@management_required
 def get_team_members():
     sales_agents = User.query.filter_by(role='salesagent').all()
     return render_template('team_members.html', team_members=sales_agents)
 
 @app.route('/manager/agent-summary/<int:agent_id>', methods=['POST'])
-@role_required('manager')
+@management_required
 def create_agent_summary_chat(agent_id):
     agent = User.query.get(agent_id)
     if not agent:
@@ -422,7 +453,7 @@ def register():
             flash('Username already exists.')
             return redirect(url_for('register'))
 
-        new_user = User(username=username, role=role, manager_id = str(uuid.uuid4()) if role =='manager' else None)
+        new_user = User(username=username, role=role, manager_id = str(uuid.uuid4()) if role in ['manager', 'smeleader'] else None)
         new_user.set_password(password)
         db.session.add(new_user)
         db.session.commit()
@@ -492,7 +523,7 @@ def agent_chat():
     chat_session = ChatSession.query.get(chat_id)
     
     # Choose agent based on context and role
-    if current_user.role == 'manager':
+    if current_user.role in ['manager', 'smeleader']:
         # Get or create manager agent with current dashboard data
         agent = get_manager_agent()
         
@@ -519,7 +550,7 @@ def agent_chat():
         result = agent.invoke({
             "messages": [{"role": "user", "content": user_message}]
         }, config={"configurable": {"thread_id": chat_id}})
-    else:  # general chat for sales agents
+    else:  # general chat for sales agents and other roles
         agent = supervisor_agent_general
         result = agent.invoke({
             "messages": [{"role": "user", "content": user_message}]
@@ -587,7 +618,7 @@ def new_chat_id():
     db.session.add(new_chat)
 
     # If this is an agent summary request
-    if agent_id and current_user.role == 'manager':
+    if agent_id and current_user.role in ['manager', 'smeleader']:
         agent = User.query.get(agent_id)
         if agent:
             # Get all client summaries for this agent
@@ -1191,7 +1222,37 @@ def generate_chat_report():
         as_attachment=True,
         download_name=f'report_{chat_id}.md'
     )
-# ...existing code...
+
+# SME Leader Dashboard API Routes
+@app.route('/api/sme/gwp-growth-trend', methods=['GET'])
+@role_required('smeleader')
+def get_gwp_growth_trend():
+    """Get GWP Growth Trend data from Excel file for D3.js chart"""
+    try:
+        # Read the kpi_monthly sheet from sme.xlsx
+        df = pd.read_excel('sme.xlsx', sheet_name='kpi_monthly')
+        
+        # Extract the Month and GWP Monthly columns
+        data = []
+        for index, row in df.iterrows():
+            if pd.notna(row['Month']) and pd.notna(row['1.2a GWP Monthly M SAR']):
+                month_str = str(row['Month']).strip()
+                
+                data.append({
+                    'month': month_str,  # Keep full format like "Jul 2024"
+                    'gwp_value': float(row['1.2a GWP Monthly M SAR'])
+                })
+        
+        return jsonify(data)
+        
+    except FileNotFoundError as e:
+        print(f"File not found error: {e}")
+        return jsonify({'error': 'SME Excel file not found'}), 404
+    except Exception as e:
+        print(f"Error in get_gwp_growth_trend: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to load GWP data: {str(e)}'}), 500
 
 if __name__ == '__main__':
     with app.app_context():
@@ -1207,4 +1268,4 @@ if __name__ == '__main__':
                 conn.commit()
                 print("Added manager_id column to user table")
         db.create_all()
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5002, debug=True)

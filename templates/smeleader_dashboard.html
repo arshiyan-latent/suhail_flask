@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SME Leader Dashboard - Suhail</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 text-white">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold">SME Leader Dashboard</h1>
+            <div class="space-x-4">
+                <a href="/" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Back to Chat</a>
+                <a href="/logout" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Logout</a>
+            </div>
+        </div>
+        
+        <!-- Dashboard Summary Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+            <!-- Total Market Size Card -->
+            <div class="bg-gradient-to-br from-slate-500/20 to-slate-600/20 rounded-xl p-4 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-xs font-medium mb-2">Total Market Size</div>
+                    <div class="text-3xl font-bold">10.4B <span class="text-xl">SAR</span></div>
+                </div>
+            </div>
+
+            <!-- GWP Size Card -->
+            <div class="bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-xl p-4 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-xs font-medium mb-2">GWP Size</div>
+                    <div class="text-3xl font-bold">1.0B <span class="text-xl">SAR</span></div>
+                </div>
+            </div>
+
+            <!-- Market Share % Card -->
+            <div class="bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 rounded-xl p-4 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-xs font-medium mb-2">Market Share %</div>
+                    <div class="text-3xl font-bold">10%</div>
+                </div>
+            </div>
+
+            <!-- New Business Value Card -->
+            <div class="bg-gradient-to-br from-purple-500/20 to-purple-600/20 rounded-xl p-4 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-xs font-medium mb-2">New Business Value</div>
+                    <div class="text-3xl font-bold">600M <span class="text-xl">SAR</span></div>
+                </div>
+            </div>
+
+            <!-- Net Retention Card -->
+            <div class="bg-gradient-to-br from-amber-500/20 to-amber-600/20 rounded-xl p-4 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-xs font-medium mb-2">Net Retention</div>
+                    <div class="text-3xl font-bold">87%</div>
+                </div>
+            </div>
+
+            <!-- Average Premium per Life Card -->
+            <div class="bg-gradient-to-br from-pink-500/20 to-pink-600/20 rounded-xl p-4 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-xs font-medium mb-2">Avg. Premium/Life</div>
+                    <div class="text-3xl font-bold">2,050 <span class="text-xl">SAR</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- What Has Been Delivered Section -->
+        <div class="mb-8">
+            <h2 class="text-2xl font-semibold mb-6">What Has Been Delivered</h2>
+            
+            <!-- Charts Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                
+                <!-- GWP Growth Trend Chart -->
+                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                    <h3 class="text-lg font-medium mb-4 text-center">Monthly GWP Trend (M SAR)</h3>
+                    <div id="gwp-chart" class="h-48 rounded-lg border border-white/10"></div>
+                </div>
+
+                <!-- Renewal Heat Map -->
+                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                    <h3 class="text-lg font-medium mb-4 text-center">Renewal Heat Map</h3>
+                    <div class="h-48 bg-white/10 rounded-lg flex items-center justify-center border border-white/20">
+                        <div class="text-center">
+                            <div class="text-white/60 text-sm mb-2">Coming Soon</div>
+                            <div class="text-white/40 text-xs">Renewal analysis by value and timeline</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Overall Renewal Probability -->
+                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                    <h3 class="text-lg font-medium mb-4 text-center">Overall Renewal Probability</h3>
+                    <div class="h-48 bg-white/10 rounded-lg flex items-center justify-center border border-white/20">
+                        <div class="text-center">
+                            <div class="text-white/60 text-sm mb-2">Coming Soon</div>
+                            <div class="text-white/40 text-xs">Weighted renewal probability analysis</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- New Business Unit Performance -->
+                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md lg:col-span-2 xl:col-span-1">
+                    <h3 class="text-lg font-medium mb-4 text-center">New Business Unit Performance</h3>
+                    <div class="text-center mb-2">
+                        <span class="text-white/50 text-sm">vs. Target</span>
+                    </div>
+                    <div class="h-40 bg-white/10 rounded-lg flex items-center justify-center border border-white/20">
+                        <div class="text-center">
+                            <div class="text-white/60 text-sm mb-2">Coming Soon</div>
+                            <div class="text-white/40 text-xs">Monthly performance analysis</div>
+                        </div>
+                    </div>
+                    <div class="text-center mt-2">
+                        <span class="text-white/40 text-xs">Jan - Dec Monthly Breakdown</span>
+                    </div>
+                </div>
+
+                <!-- Renewals Unit Performance -->
+                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md lg:col-span-2 xl:col-span-2">
+                    <h3 class="text-lg font-medium mb-4 text-center">Renewals Unit Performance vs Target</h3>
+                    <div class="h-48 bg-white/10 rounded-lg flex items-center justify-center border border-white/20">
+                        <div class="text-center">
+                            <div class="text-white/60 text-sm mb-2">Coming Soon</div>
+                            <div class="text-white/40 text-xs">Actual vs target performance analysis</div>
+                        </div>
+                    </div>
+                    <div class="flex justify-center mt-4 space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-amber-500/70 rounded"></div>
+                            <span class="text-xs text-white/50">Actual</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-amber-300/50 rounded"></div>
+                            <span class="text-xs text-white/50">Target</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SME Leader Overview Section -->
+        <div class="mb-8">
+            <h2 class="text-xl font-semibold mb-4">Manager Oversight</h2>
+            <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {% for manager in managers %}
+                    <div class="bg-white/10 rounded-lg p-4">
+                        <h3 class="font-medium text-lg mb-2">{{ manager.username }}</h3>
+                        <p class="text-white/70 text-sm">Manager ID: {{ manager.id }}</p>
+                        <p class="text-white/60 text-xs mt-2">Click to view detailed analytics</p>
+                    </div>
+                    {% endfor %}
+                    {% if not managers %}
+                    <div class="col-span-full text-center text-white/50 py-8">
+                        No managers found in the system.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+
+
+       
+
+        <!-- SME Leader Chat Section -->
+        <div class="mb-8">
+            <h2 class="text-xl font-semibold mb-4">SME Leader Communication</h2>
+            <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                <div class="text-center">
+                    <h3 class="text-lg font-medium mb-2">Strategic Business Chat</h3>
+                    <p class="text-white/70 mb-4">Access specialized SME Leader chat for strategic business discussions</p>
+                    <button onclick="openSMEChat()" class="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all">
+                        Open SME Leader Chat
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openSMEChat() {
+            // Create new SME Leader specific chat
+            fetch('/v1/chat/newchat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    user_id: {{ current_user.id if current_user.is_authenticated else 0 }},
+                    title: 'SME Leader Strategic Chat'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.id) {
+                    // Redirect to chat with the new SME Leader chat ID
+                    window.location.href = `/?chat_id=${data.id}&sme_mode=true`;
+                }
+            })
+            .catch(error => {
+                console.error('Error creating SME chat:', error);
+                alert('Error creating SME Leader chat. Please try again.');
+            });
+        }
+    </script>
+
+    <!-- D3.js Library -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <!-- GWP Growth Trend Chart -->
+    <script>
+        // Load GWP Growth Trend data and render chart
+        async function loadGWPChart() {
+            try {
+                console.log('Loading GWP chart data...');
+                const response = await fetch('/api/sme/gwp-growth-trend');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received data:', data);
+                
+                if (!data || data.length === 0) {
+                    document.getElementById('gwp-chart').innerHTML = 
+                        '<div class="flex items-center justify-center h-full text-white/50">No data available</div>';
+                    return;
+                }
+                
+                renderGWPChart(data);
+            } catch (error) {
+                console.error('Error loading GWP data:', error);
+                document.getElementById('gwp-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50">Error loading data: ${error.message}</div>`;
+            }
+        }
+        
+        function renderGWPChart(data) {
+            // Clear any existing chart
+            d3.select("#gwp-chart").selectAll("*").remove();
+            
+            // Set dimensions and margins - increase bottom margin for rotated labels
+            const margin = {top: 30, right: 80, bottom: 60, left: 60};
+            const width = document.getElementById('gwp-chart').offsetWidth - margin.left - margin.right;
+            const height = 192 - margin.top - margin.bottom; // h-48 = 192px
+            
+            // Create SVG
+            const svg = d3.select("#gwp-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            // Month mapping for parsing dates like "Jul 2024"
+            const monthMap = {
+                'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+            };
+            
+            // Process data and create proper dates
+            data.forEach(d => {
+                // Parse "Jul 2024" format
+                const parts = d.month.split(' ');
+                if (parts.length >= 2) {
+                    const monthName = parts[0];
+                    const year = parseInt(parts[1]);
+                    const monthNum = monthMap[monthName];
+                    
+                    if (monthNum !== undefined && !isNaN(year)) {
+                        d.monthDate = new Date(year, monthNum, 1);
+                        d.gwp_value = +d.gwp_value;
+                        d.sortKey = year * 12 + monthNum; // For sorting
+                    }
+                } else {
+                    console.warn(`Cannot parse month: ${d.month}`);
+                }
+            });
+            
+            // Filter out invalid dates and sort chronologically
+            data = data.filter(d => d.monthDate).sort((a, b) => a.sortKey - b.sortKey);
+            
+            console.log('Processed data for chart:', data);
+            
+            if (data.length === 0) {
+                svg.append("text")
+                    .attr("x", width / 2)
+                    .attr("y", height / 2)
+                    .attr("text-anchor", "middle")
+                    .style("fill", "rgba(255,255,255,0.5)")
+                    .text("No valid data to display");
+                return;
+            }
+            
+            // Set scales
+            const xScale = d3.scaleTime()
+                .domain(d3.extent(data, d => d.monthDate))
+                .range([0, width]);
+            
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.gwp_value)])
+                .nice()
+                .range([height, 0]);
+            
+            // Create line generator
+            const line = d3.line()
+                .x(d => xScale(d.monthDate))
+                .y(d => yScale(d.gwp_value))
+                .curve(d3.curveMonotoneX);
+            
+            // Add X axis with month labels - show every other month
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale)
+                    .tickFormat(d3.timeFormat("%b %y"))
+                    .ticks(d3.timeMonth.every(2)))  // Show every 2 months
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.8)")
+                .style("font-size", "10px")
+                .attr("transform", "rotate(-35)")
+                .style("text-anchor", "end")
+                .attr("dx", "-0.5em")
+                .attr("dy", "0.15em");
+            
+            // Add Y axis
+            svg.append("g")
+                .call(d3.axisLeft(yScale)
+                    .ticks(5)
+                    .tickFormat(d3.format(".1s")))
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.7)")
+                .style("font-size", "11px");
+            
+            // Style axis lines and make them more visible
+            svg.selectAll(".domain")
+                .style("stroke", "rgba(255,255,255,0.4)");
+            
+            svg.selectAll(".tick line")
+                .style("stroke", "rgba(255,255,255,0.2)");
+            
+            // Add the main line
+            svg.append("path")
+                .datum(data)
+                .attr("fill", "none")
+                .attr("stroke", "#3b82f6")
+                .attr("stroke-width", 3)
+                .attr("d", line);
+            
+            // Add data points
+            svg.selectAll(".dot")
+                .data(data)
+                .enter().append("circle")
+                .attr("class", "dot")
+                .attr("cx", d => xScale(d.monthDate))
+                .attr("cy", d => yScale(d.gwp_value))
+                .attr("r", 4)
+                .attr("fill", "#3b82f6")
+                .attr("stroke", "white")
+                .attr("stroke-width", 1);
+            
+            // Remove the old title that was inside the SVG
+            
+            // Add tooltips
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.8)")
+                .style("color", "white")
+                .style("padding", "8px")
+                .style("border-radius", "4px")
+                .style("font-size", "12px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000");
+            
+            // Add interactive overlay
+            svg.selectAll(".overlay")
+                .data(data)
+                .enter().append("circle")
+                .attr("class", "overlay")
+                .attr("cx", d => xScale(d.monthDate))
+                .attr("cy", d => yScale(d.gwp_value))
+                .attr("r", 8)
+                .attr("fill", "transparent")
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`<strong>${d.month}</strong><br/>GWP: ${d3.format(".1f")(d.gwp_value)} M SAR`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+        }
+        
+        // Load chart when page loads
+        document.addEventListener('DOMContentLoaded', loadGWPChart);
+    </script>
+</body>
+</html>

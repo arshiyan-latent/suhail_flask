@@ -18,6 +18,7 @@
       <select name="role" class="px-4 py-2 rounded bg-white/10 border border-white/20 text-sm">
                         <option value="manager">Manager</option>
                         <option value="salesagent">Sales Agent</option>
+                        <option value="smeleader">SME Leader</option>
                         <option value="admin">Admin</option>
       </select>
       <button type="submit" class="bg-purple-600 px-4 py-2 rounded text-white hover:bg-purple-700 text-sm">Add User</button>
@@ -45,8 +46,9 @@
                 <input type="hidden" name="action" value="update">
                 <input type="hidden" name="user_id" value="{{ user.id }}">
                 <select name="role" class="px-2 py-1 bg-white/10 border border-white/20 rounded">
-                  <option value="user" {% if user.role == 'manager' %}selected{% endif %}>Manager</option>
-                  <option value="user" {% if user.role == 'salesagent' %}selected{% endif %}>Sales Agent</option>
+                  <option value="manager" {% if user.role == 'manager' %}selected{% endif %}>Manager</option>
+                  <option value="salesagent" {% if user.role == 'salesagent' %}selected{% endif %}>Sales Agent</option>
+                  <option value="smeleader" {% if user.role == 'smeleader' %}selected{% endif %}>SME Leader</option>
                   <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
                 </select>
             </td>
