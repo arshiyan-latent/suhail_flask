@@ -1254,6 +1254,145 @@ def get_gwp_growth_trend():
         traceback.print_exc()
         return jsonify({'error': f'Failed to load GWP data: {str(e)}'}), 500
 
+@app.route('/api/sme/funnel-size-trend', methods=['GET'])
+@role_required('smeleader')
+def get_funnel_size_trend():
+    """Get Funnel Size Trend data from Excel file for D3.js line chart"""
+    try:
+        # Read the kpi_monthly sheet from sme.xlsx
+        df = pd.read_excel('sme.xlsx', sheet_name='kpi_monthly')
+        
+        # Extract the Month and Funnel Size Count columns
+        data = []
+        for index, row in df.iterrows():
+            if pd.notna(row['Month']) and pd.notna(row['3.1 Funnel Size Count']):
+                month_str = str(row['Month']).strip()
+                
+                data.append({
+                    'month': month_str,  # Keep full format like "Jul 2024"
+                    'funnel_count': float(row['3.1 Funnel Size Count'])
+                })
+        
+        return jsonify(data)
+        
+    except FileNotFoundError as e:
+        print(f"File not found error: {e}")
+        return jsonify({'error': 'SME Excel file not found'}), 404
+    except Exception as e:
+        print(f"Error in get_funnel_size_trend: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to load Funnel Size data: {str(e)}'}), 500
+
+@app.route('/api/sme/funnel-coverage', methods=['GET'])
+@role_required('smeleader')
+def get_funnel_coverage():
+    """Get Funnel Coverage data from Excel file - monthly coverage percentages"""
+    try:
+        # Read the kpi_monthly sheet from sme.xlsx
+        df = pd.read_excel('sme.xlsx', sheet_name='kpi_monthly')
+        
+        # Extract the Month and Funnel Coverage Pct columns
+        data = []
+        for index, row in df.iterrows():
+            if pd.notna(row['Month']) and pd.notna(row['3.2 Funnel Coverage Pct']):
+                month_str = str(row['Month']).strip()
+                
+                data.append({
+                    'month': month_str,  # Keep full format like "Jul 2024"
+                    'coverage_pct': float(row['3.2 Funnel Coverage Pct'])
+                })
+        
+        return jsonify(data)
+        
+    except FileNotFoundError as e:
+        print(f"File not found error: {e}")
+        return jsonify({'error': 'SME Excel file not found'}), 404
+    except Exception as e:
+        print(f"Error in get_funnel_coverage: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to load Funnel Coverage data: {str(e)}'}), 500
+
+@app.route('/api/sme/budget-fit-analysis', methods=['GET'])
+@role_required('smeleader')
+def get_budget_fit_analysis():
+    """Get Budget Fit Analysis data from Excel file - averaged values across all months"""
+    try:
+        # Read the suhail_signals sheet from sme.xlsx
+        df = pd.read_excel('sme.xlsx', sheet_name='suhail_signals')
+        
+        # Check if required columns exist
+        required_columns = ['3.4.1_Budget_Fit_Pct', '3.4.2_Proposal_Diversity_Pct', '3.4.3_Competitor_WinRate_Pct']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        if missing_columns:
+            print(f"Missing columns in suhail_signals sheet: {missing_columns}")
+            print(f"Available columns: {list(df.columns)}")
+            return jsonify([])
+        
+        # Calculate averages across all months for each metric
+        budget_fit_avg = df['3.4.1_Budget_Fit_Pct'].dropna().mean()
+        proposal_diversity_avg = df['3.4.2_Proposal_Diversity_Pct'].dropna().mean()
+        competitor_winrate_avg = df['3.4.3_Competitor_WinRate_Pct'].dropna().mean()
+        
+        # Create the response data
+        result = [
+            {
+                'metric': 'Budget Fit Analysis',
+                'percentage': round(budget_fit_avg, 1) if not pd.isna(budget_fit_avg) else 0
+            },
+            {
+                'metric': 'Proposal Diversity',
+                'percentage': round(proposal_diversity_avg, 1) if not pd.isna(proposal_diversity_avg) else 0
+            },
+            {
+                'metric': 'Competitor Win/Loss',
+                'percentage': round(competitor_winrate_avg, 1) if not pd.isna(competitor_winrate_avg) else 0
+            }
+        ]
+        
+        print(f"Returning budget fit analysis data: {result}")
+        return jsonify(result)
+        
+    except FileNotFoundError as e:
+        print(f"File not found error: {e}")
+        return jsonify({'error': 'SME Excel file not found'}), 404
+    except Exception as e:
+        print(f"Error in get_budget_fit_analysis: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to load Budget Fit Analysis data: {str(e)}'}), 500
+
+@app.route('/api/sme/renewal-heatmap', methods=['GET'])
+@role_required('smeleader')
+def get_renewal_heatmap():
+    """Get Renewal Heat Map data from Excel file for D3.js heatmap visualization"""
+    try:
+        # Read the heatmap_monthly sheet from sme.xlsx
+        df = pd.read_excel('sme.xlsx', sheet_name='heatmap_monthly')
+        
+        # Process the data for heatmap
+        data = []
+        for index, row in df.iterrows():
+            if pd.notna(row['Month']) and pd.notna(row['Bucket_Days']) and pd.notna(row['2.2_Renewal_Value_M_SAR']):
+                data.append({
+                    'month': str(row['Month']).strip(),
+                    'bucket_days': int(row['Bucket_Days']),
+                    'renewal_value': float(row['2.2_Renewal_Value_M_SAR'])
+                })
+        
+        return jsonify(data)
+        
+    except FileNotFoundError as e:
+        print(f"File not found error: {e}")
+        return jsonify({'error': 'SME Excel file not found'}), 404
+    except Exception as e:
+        print(f"Error in get_renewal_heatmap: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to load heatmap data: {str(e)}'}), 500
+
 if __name__ == '__main__':
     with app.app_context():
         # Check if we need to add manager_id column
