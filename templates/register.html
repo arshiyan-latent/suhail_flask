@@ -61,12 +61,30 @@
                     <select 
                         name="role" 
                         id="role" 
+                        onchange="toggleManagerSelection()"
                         class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-400 transition-all duration-300"
                     >
                         <option value="manager">Manager</option>
                         <option value="salesagent">Sales Agent</option>
-
+                        <option value="smeleader">SME Leader</option>
                         <option value="admin">Admin</option>
+                    </select>
+                </div>
+
+                <!-- Manager Selection (shown only for agents and managers) -->
+                <div id="manager-selection" class="hidden">
+                    <label for="manager_id" class="block text-sm font-medium text-white/90 mb-2">
+                        <span id="manager-label">Manager</span>
+                    </label>
+                    <select 
+                        name="manager_id" 
+                        id="manager_id"
+                        class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-400 transition-all duration-300"
+                    >
+                        <option value="">Select a manager...</option>
+                        {% for manager in managers %}
+                            <option value="{{ manager.id }}">{{ manager.username }} ({{ manager.role|title }})</option>
+                        {% endfor %}
                     </select>
                 </div>
 
@@ -99,5 +117,37 @@
             {% endwith %}
         </div>
     </div>
+
+    <script>
+        function toggleManagerSelection() {
+            const roleSelect = document.getElementById('role');
+            const managerSelection = document.getElementById('manager-selection');
+            const managerLabel = document.getElementById('manager-label');
+            const managerSelect = document.getElementById('manager_id');
+            
+            const selectedRole = roleSelect.value;
+            
+            if (selectedRole === 'salesagent' || selectedRole === 'manager') {
+                managerSelection.classList.remove('hidden');
+                managerSelect.required = true;
+                
+                // Update label based on role
+                if (selectedRole === 'salesagent') {
+                    managerLabel.textContent = 'Reporting Manager';
+                } else if (selectedRole === 'manager') {
+                    managerLabel.textContent = 'Reporting SME Leader/Manager';
+                }
+            } else {
+                managerSelection.classList.add('hidden');
+                managerSelect.required = false;
+                managerSelect.value = '';
+            }
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            toggleManagerSelection();
+        });
+    </script>
 </body>
 </html>

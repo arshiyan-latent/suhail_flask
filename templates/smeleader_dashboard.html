@@ -1,0 +1,2579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SME Leader Dashboard - Suhail</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom slider styling */
+        .slider::-webkit-slider-thumb {
+            appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
+        }
+        
+        .slider::-moz-range-thumb {
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
+        }
+        
+        .slider::-webkit-slider-track {
+            height: 8px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.2);
+        }
+        
+        .slider::-moz-range-track {
+            height: 8px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.2);
+        }
+        
+        /* Smooth transitions for What-If mode */
+        .dashboard-transition {
+            transition: opacity 0.3s ease-in-out, filter 0.3s ease-in-out;
+        }
+        
+        .scenario-overlay {
+            position: relative;
+        }
+        
+        .scenario-overlay::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent 40%, rgba(59, 130, 246, 0.1) 50%, transparent 60%);
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            border-radius: inherit;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            pointer-events: none;
+        }
+        
+        .scenario-active .scenario-overlay::before {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 text-white">
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold">SME Leader Dashboard</h1>
+            <div class="flex items-center space-x-4">
+                <!-- Mode Toggle -->
+                <div class="flex items-center bg-white/10 rounded-lg p-1">
+                    <button id="live-mode" class="px-3 py-1 text-sm rounded-md transition-all bg-white/20 text-white font-medium">Live</button>
+                    <button id="whatif-mode" class="px-3 py-1 text-sm rounded-md transition-all text-white/70 hover:text-white">What-If Lab</button>
+                </div>
+                <a href="/" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Back to Chat</a>
+                <a href="/logout" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Logout</a>
+            </div>
+        </div>
+        
+        <!-- Dashboard Summary Cards -->
+        <div id="dashboard-content" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8 transition-all duration-300">
+            <!-- Total Market Size Card -->
+            <div class="bg-gradient-to-br from-slate-500/20 to-slate-600/20 rounded-xl p-4 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-xs font-medium mb-2">Total Market Size</div>
+                    <div class="text-3xl font-bold">10.4B <span class="text-xl">SAR</span></div>
+                </div>
+            </div>
+
+            <!-- GWP Size Card -->
+            <div class="bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-xl p-4 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-xs font-medium mb-2">GWP Size</div>
+                    <div class="text-3xl font-bold">1.0B <span class="text-xl">SAR</span></div>
+                </div>
+            </div>
+
+            <!-- Market Share % Card -->
+            <div class="bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 rounded-xl p-4 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-xs font-medium mb-2">Market Share %</div>
+                    <div class="text-3xl font-bold">10%</div>
+                </div>
+            </div>
+
+            <!-- New Business Value Card -->
+            <div class="bg-gradient-to-br from-purple-500/20 to-purple-600/20 rounded-xl p-4 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-xs font-medium mb-2">New Business Value</div>
+                    <div class="text-3xl font-bold">600M <span class="text-xl">SAR</span></div>
+                </div>
+            </div>
+
+            <!-- Net Retention Card -->
+            <div class="bg-gradient-to-br from-amber-500/20 to-amber-600/20 rounded-xl p-4 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-xs font-medium mb-2">Net Retention</div>
+                    <div class="text-3xl font-bold">87%</div>
+                </div>
+            </div>
+
+            <!-- Average Premium per Life Card -->
+            <div class="bg-gradient-to-br from-pink-500/20 to-pink-600/20 rounded-xl p-4 backdrop-blur-md">
+                <div class="flex flex-col">
+                    <div class="text-white/70 text-xs font-medium mb-2">Avg. Premium/Life</div>
+                    <div class="text-3xl font-bold">2,050 <span class="text-xl">SAR</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- What Has Been Delivered Section -->
+        <div class="mb-8">
+            <h2 class="text-2xl font-semibold mb-6">What Has Been Delivered</h2>
+            
+            <!-- Charts Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                
+                <!-- GWP Growth Trend Chart -->
+                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                    <h3 class="text-lg font-medium mb-4 text-center">Monthly GWP Trend (M SAR)</h3>
+                    <div id="gwp-chart" class="h-48 rounded-lg border border-white/10"></div>
+                </div>
+
+                <!-- Renewal Heat Map -->
+                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                    <h3 class="text-lg font-medium mb-4 text-center">Renewal Heat Map</h3>
+                    <div id="renewal-heatmap" class="h-48 rounded-lg border border-white/10"></div>
+                </div>
+
+                <!-- Overall Renewal Probability -->
+                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                    <h3 class="text-lg font-medium mb-4 text-center">Overall Renewal Probability</h3>
+                    <div id="renewal-probability-chart" class="h-48 rounded-lg border border-white/10"></div>
+                </div>
+
+                <!-- New Business Unit Performance -->
+                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                    <h3 class="text-lg font-medium mb-4 text-center">New Business Unit Performance vs. Target</h3>
+                    <div id="new-business-performance-chart" class="h-40"></div>
+                    <div class="flex justify-center mt-2 space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-violet-500 rounded"></div>
+                            <span class="text-xs text-white/70">Achieved</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-gray-500 rounded"></div>
+                            <span class="text-xs text-white/70">Gap To Target</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Renewals Unit Performance -->
+                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                    <h3 class="text-lg font-medium mb-4 text-center">Renewals Unit Performance vs Target</h3>
+                    <div id="renewals-performance-chart" class="h-36"></div>
+                    <div class="flex justify-center mt-2 space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-emerald-500 rounded"></div>
+                            <span class="text-xs text-white/70">Actual</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-gray-500 rounded"></div>
+                            <span class="text-xs text-white/70">Gap To Target</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Competitor Overview -->
+                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                    <h3 class="text-lg font-medium mb-4 text-center">Competitor Win Rate Overview</h3>
+                    <div id="competitor-overview-chart" class="h-40"></div>
+                    <div class="flex justify-center mt-2 space-x-2 text-xs">
+                        <div class="flex items-center space-x-1">
+                            <div class="w-2 h-2 bg-blue-500 rounded"></div>
+                            <span class="text-white/70">Bupa</span>
+                        </div>
+                        <!-- <div class="flex items-center space-x-1">
+                            <div class="w-2 h-2 bg-green-500 rounded"></div>
+                            <span class="text-white/70">Tawuniya</span>
+                        </div> -->
+                        <div class="flex items-center space-x-1">
+                            <div class="w-2 h-2 bg-yellow-500 rounded"></div>
+                            <span class="text-white/70">MedGulf</span>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <div class="w-2 h-2 bg-purple-500 rounded"></div>
+                            <span class="text-white/70">Allianz</span>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <div class="w-2 h-2 bg-orange-500 rounded"></div>
+                            <span class="text-white/70">Other</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sales Intelligence Analytics -->
+        <div class="mb-8">
+            <h2 class="text-2xl font-semibold mb-6">Sales Intelligence Analytics</h2>
+            
+            <!-- Sales Analytics Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                
+                <!-- Funnel Size Trend Chart Card -->
+                <div class="bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 rounded-xl p-6 backdrop-blur-md">
+                    <h3 class="text-lg font-medium mb-4 text-center">Funnel Size Trend (Count)</h3>
+                    <div id="funnel-chart" class="h-32 relative"></div>
+                </div>
+
+                <!-- Funnel Coverage Chart Card -->
+                <div class="bg-gradient-to-br from-teal-500/20 to-teal-600/20 rounded-xl p-6 backdrop-blur-md">
+                    <h3 class="text-lg font-medium mb-4 text-center">Funnel Coverage %</h3>
+                    <div id="funnel-coverage-chart" class="h-32 relative"></div>
+                </div>
+
+                <!-- Win Ratio vs Probability Card -->
+                <div class="bg-gradient-to-br from-orange-500/20 to-orange-600/20 rounded-xl p-6 backdrop-blur-md">
+                    <div class="flex flex-col">
+                        <h3 class="text-lg font-medium mb-4 text-center">Actual win rate vs Suhail's prediction</h3>
+                        <div id="win-ratio-chart" class="h-24 w-full"></div>
+                    </div>
+                </div>
+
+                <!-- Budget Fit Analysis Card -->
+                <div class="bg-gradient-to-br from-indigo-500/20 to-indigo-600/20 rounded-xl p-6 backdrop-blur-md">
+                    <div class="flex flex-col">
+                        <h3 class="text-lg font-medium mb-4 text-center">Budget Fit Analysis</h3>
+                        <div id="budget-fit-chart" class="h-36 w-full"></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+
+
+       
+        <!-- SME Leader Overview Section -->
+        <div class="mb-8">
+            <h2 class="text-xl font-semibold mb-4">Manager Oversight</h2>
+            <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {% for manager in managers %}
+                    <div class="bg-white/10 rounded-lg p-4 hover:bg-white/15 transition-all">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-medium text-lg">{{ manager.username }}</h3>
+                            <span class="text-xs px-2 py-1 bg-blue-500/20 text-blue-200 rounded-full">{{ manager.role|title }}</span>
+                        </div>
+                        
+                        {% if manager.manager_name %}
+                        <p class="text-white/60 text-sm mb-2">
+                            <span class="text-white/40">Reports to:</span> {{ manager.manager_name }}
+                        </p>
+                        {% endif %}
+                        
+                        <div class="flex items-center justify-between text-sm mb-3">
+                            <span class="text-white/70">Managed Agents:</span>
+                            <span class="font-medium text-emerald-400">{{ manager.managed_agents_count }}</span>
+                        </div>
+                        
+                        {% if manager.managed_agents %}
+                        <div class="mb-3">
+                            <p class="text-xs text-white/50 mb-1">Team Members:</p>
+                            <div class="flex flex-wrap gap-1">
+                                {% for agent in manager.managed_agents %}
+                                <span class="text-xs px-2 py-1 bg-gray-600/30 text-gray-200 rounded">{{ agent.username }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <button class="w-full mt-2 px-3 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 rounded-lg text-sm transition-all">
+                            View Analytics
+                        </button>
+                    </div>
+                    {% endfor %}
+                    {% if not managers %}
+                    <div class="col-span-full text-center text-white/50 py-8">
+                        No managers found in the system.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+
+        <!-- SME Leader Chat Section -->
+        <div class="mb-8">
+            <h2 class="text-xl font-semibold mb-4">SME Leader Communication</h2>
+            <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                <div class="text-center">
+                    <h3 class="text-lg font-medium mb-2">Strategic Business Chat</h3>
+                    <p class="text-white/70 mb-4">Access specialized SME Leader chat for strategic business discussions</p>
+                    <button onclick="openSMEChat()" class="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all">
+                        Open SME Leader Chat
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- What-If Lab Scenario Panel -->
+    <div id="scenario-panel" class="fixed right-0 top-0 h-full w-80 bg-gray-900/95 backdrop-blur-md border-l border-white/20 transform translate-x-full transition-transform duration-300 z-50 hidden">
+        <div class="p-6 h-full overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-semibold text-white">Levers</h3>
+                <button id="close-panel" class="text-white/70 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Retention Lever -->
+            <div class="mb-8">
+                <div class="flex justify-between items-center mb-4">
+                    <label class="text-white font-medium">Net Retention</label>
+                    <span id="retention-value" class="text-white/70 text-sm">87%</span>
+                </div>
+                
+                <!-- Slider -->
+                <div class="mb-4">
+                    <input type="range" id="retention-slider" min="78" max="96" value="87" 
+                           class="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider">
+                    <div class="flex justify-between text-xs text-white/50 mt-1">
+                        <span>78%</span>
+                        <span>96%</span>
+                    </div>
+                </div>
+                
+                <!-- Numeric Input -->
+                <div class="flex items-center space-x-2">
+                    <span class="text-white/70 text-sm">Exact:</span>
+                    <input type="number" id="retention-input" min="78" max="96" value="87" 
+                           class="w-16 px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm focus:outline-none focus:border-white/40">
+                    <span class="text-white/70 text-sm">%</span>
+                </div>
+            </div>
+            
+            <!-- Win Ratio Lever -->
+            <div class="mb-8">
+                <div class="flex justify-between items-center mb-4">
+                    <label class="text-white font-medium">Win Ratio</label>
+                    <span id="winratio-value" class="text-white/70 text-sm">45%</span>
+                </div>
+                
+                <!-- Slider -->
+                <div class="mb-4">
+                    <input type="range" id="winratio-slider" min="35" max="65" value="45" 
+                           class="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider">
+                    <div class="flex justify-between text-xs text-white/50 mt-1">
+                        <span>35%</span>
+                        <span>65%</span>
+                    </div>
+                </div>
+                
+                <!-- Numeric Input -->
+                <div class="flex items-center space-x-2">
+                    <span class="text-white/70 text-sm">Exact:</span>
+                    <input type="number" id="winratio-input" min="35" max="65" value="45" 
+                           class="w-16 px-2 py-1 bg-white/10 border border-white/20 rounded text-white text-sm focus:outline-none focus:border-white/40">
+                    <span class="text-white/70 text-sm">%</span>
+                </div>
+            </div>
+            
+            <!-- Reset Button -->
+            <button id="reset-scenario" class="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white hover:bg-white/20 transition-all mb-6">
+                Reset to Baseline
+            </button>
+            
+            <!-- Suhail Insights Box -->
+            <div class="bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-xl p-4 border border-blue-400/20 backdrop-blur-md">
+                <div class="flex items-center space-x-2 mb-3">
+                    <div class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+                        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                        </svg>
+                    </div>
+                    <h4 class="text-white font-medium text-sm">Suhail Insights</h4>
+                </div>
+                
+                <div id="insights-content" class="text-xs text-white/80 leading-relaxed">
+                    <div class="text-white/60">Ready to analyze your scenario changes...</div>
+                </div>
+                
+                <!-- Loading animation (hidden by default) -->
+                <div id="insights-loading" class="hidden">
+                    <div class="flex items-center space-x-2 text-blue-400">
+                        <div class="flex space-x-1">
+                            <div class="w-1 h-1 bg-blue-400 rounded-full animate-bounce"></div>
+                            <div class="w-1 h-1 bg-blue-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                            <div class="w-1 h-1 bg-blue-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                        </div>
+                        <span class="text-xs">Suhail is analyzing...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // What-If Lab functionality
+        let isWhatIfMode = false;
+        let baselineValues = {
+            retention: 87,
+            gwpSize: 1.0,
+            marketShare: 10,
+            winRatio: 45,
+            newBusiness: 600, // Million SAR
+            pipelineValue: 1200 // Million SAR - this would come from Excel data
+        };
+        let currentScenario = {...baselineValues};
+        let lastChangedLever = null; // Track which lever was changed last
+
+        function openSMEChat() {
+            // Create new SME Leader specific chat
+            fetch('/v1/chat/newchat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    user_id: {{ current_user.id if current_user.is_authenticated else 0 }},
+                    title: 'SME Leader Strategic Chat'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.id) {
+                    // Redirect to chat with the new SME Leader chat ID
+                    window.location.href = `/?chat_id=${data.id}&sme_mode=true`;
+                }
+            })
+            .catch(error => {
+                console.error('Error creating SME chat:', error);
+                alert('Error creating SME Leader chat. Please try again.');
+            });
+        }
+
+        // Mode Toggle Functions
+        function switchToLiveMode() {
+            isWhatIfMode = false;
+            document.getElementById('live-mode').classList.add('bg-white/20', 'font-medium');
+            document.getElementById('live-mode').classList.remove('text-white/70');
+            document.getElementById('whatif-mode').classList.remove('bg-white/20', 'font-medium');
+            document.getElementById('whatif-mode').classList.add('text-white/70');
+            
+            // Hide scenario panel and restore dashboard to full size
+            document.getElementById('scenario-panel').classList.add('hidden');
+            document.getElementById('scenario-panel').classList.add('translate-x-full');
+            
+            // Reset dashboard container to full width and scale with proper centering
+            const container = document.querySelector('.container');
+            container.style.marginRight = 'auto';
+            container.style.marginLeft = 'auto'; // Ensure proper centering with both margins auto
+            container.style.transform = 'scale(1)';
+            container.style.transformOrigin = 'center center';
+            container.style.transition = 'all 0.3s ease-in-out';
+            container.style.width = 'auto';
+            
+            // Remove faded effect from dashboard
+            document.getElementById('dashboard-content').classList.remove('opacity-40');
+            document.querySelectorAll('.dashboard-section').forEach(section => {
+                section.classList.remove('opacity-40');
+            });
+            
+            // Reset to baseline values
+            resetScenarioValues();
+            
+            // Also reset dashboard cards to original styling when leaving What-If mode
+            resetDashboardCardsToOriginal();
+        }
+
+        function switchToWhatIfMode() {
+            isWhatIfMode = true;
+            document.getElementById('whatif-mode').classList.add('bg-white/20', 'font-medium');
+            document.getElementById('whatif-mode').classList.remove('text-white/70');
+            document.getElementById('live-mode').classList.remove('bg-white/20', 'font-medium');
+            document.getElementById('live-mode').classList.add('text-white/70');
+            
+            // Show scenario panel
+            document.getElementById('scenario-panel').classList.remove('hidden');
+            document.getElementById('scenario-panel').classList.remove('translate-x-full');
+            
+            // Scale down and adjust dashboard to fit alongside panel
+            const container = document.querySelector('.container');
+            const panelWidth = 280; // Reduced effective panel width for closer fit
+            const viewportWidth = window.innerWidth;
+            const availableWidth = viewportWidth - panelWidth - 8; // Minimal padding for tighter fit
+            const scaleRatio = Math.min(availableWidth / viewportWidth, 0.98); // Much higher max scale for larger dashboard
+            
+            container.style.transform = `scale(${scaleRatio})`;
+            container.style.transformOrigin = 'left top';
+            container.style.transition = 'all 0.3s ease-in-out';
+            container.style.marginRight = `${panelWidth - 50}px`; // Much closer to panel (230px instead of 300px)
+            container.style.width = `${100 / scaleRatio}%`; // Compensate for scaling
+            
+            // Keep dashboard fully visible (no fading)
+            document.getElementById('dashboard-content').classList.remove('opacity-40');
+            document.querySelectorAll('.dashboard-section').forEach(section => {
+                section.classList.remove('opacity-40');
+            });
+        }
+
+        // Scenario calculations
+        function calculateScenario(retentionRate, winRatio) {
+            // Use current values if parameters not provided
+            if (retentionRate === undefined) retentionRate = currentScenario.retention;
+            if (winRatio === undefined) winRatio = currentScenario.winRatio;
+            
+            // Calculate retention impact
+            const retentionMultiplier = retentionRate / baselineValues.retention;
+            
+            // Calculate win ratio impact on new business
+            const winRatioChange = (winRatio - baselineValues.winRatio) / 100; // Convert percentage to decimal
+            const additionalNewBusiness = winRatioChange * baselineValues.pipelineValue; // Additional business from improved win rate
+            const newBusinessTotal = baselineValues.newBusiness + additionalNewBusiness;
+            
+            // Calculate combined GWP impact
+            const baseGWPFromRetention = baselineValues.gwpSize * retentionMultiplier;
+            const additionalGWPFromWinRatio = additionalNewBusiness / 1000; // Convert to billions
+            const totalGWP = baseGWPFromRetention + additionalGWPFromWinRatio;
+            
+            return {
+                retention: retentionRate,
+                winRatio: winRatio,
+                gwpSize: totalGWP.toFixed(1),
+                marketShare: (baselineValues.marketShare * (totalGWP / baselineValues.gwpSize)).toFixed(1),
+                newBusiness: Math.round(newBusinessTotal),
+                additionalNewBusiness: Math.round(additionalNewBusiness)
+            };
+        }
+
+        function updateScenarioValues(retentionRate, winRatio, changedLever) {
+            // Track which lever was changed for targeted insights
+            if (changedLever) {
+                lastChangedLever = changedLever;
+            }
+            
+            currentScenario = calculateScenario(retentionRate, winRatio);
+            
+            // Update retention display if provided
+            if (retentionRate !== undefined) {
+                document.getElementById('retention-value').textContent = retentionRate + '%';
+            }
+            
+            // Update win ratio display if provided  
+            if (winRatio !== undefined) {
+                document.getElementById('winratio-value').textContent = winRatio + '%';
+            }
+            
+            // Update dashboard cards if in What-If mode
+            if (isWhatIfMode) {
+                updateDashboardCards();
+            }
+            
+            // Trigger Suhail Insights analysis
+            generateInsights(currentScenario.retention, currentScenario.winRatio, lastChangedLever);
+        }
+
+        function updateDashboardCards() {
+            // Update the actual dashboard cards with scenario values and color coding
+            const gwpCard = document.querySelector('[data-card="gwp"]');
+            const marketCard = document.querySelector('[data-card="market"]');
+            const retentionCard = document.querySelector('[data-card="retention"]');
+            const newBusinessCard = document.querySelector('[data-card="newbusiness"]');
+            
+            if (gwpCard) {
+                const isPositive = parseFloat(currentScenario.gwpSize) >= parseFloat(baselineValues.gwpSize);
+                const arrow = isPositive ? '↗' : '↘';
+                const colorClass = isPositive ? 'text-green-400' : 'text-red-400';
+                const bgColorClass = isPositive ? 'bg-green-500/10' : 'bg-red-500/10';
+                
+                gwpCard.innerHTML = `
+                    <div class="relative">
+                        <div class="text-3xl font-bold ${colorClass}">${currentScenario.gwpSize}B 
+                            <span class="text-xl">SAR</span>
+                            <span class="text-sm ml-1">${arrow}</span>
+                        </div>
+                        <div class="text-xs text-white/50 mt-1">
+                            Original: <span class="line-through">${baselineValues.gwpSize}B SAR</span>
+                        </div>
+                        <div class="absolute inset-0 ${bgColorClass} rounded-lg -z-10"></div>
+                    </div>
+                `;
+            }
+            
+            if (marketCard) {
+                const isPositive = parseFloat(currentScenario.marketShare) >= parseFloat(baselineValues.marketShare);
+                const arrow = isPositive ? '↗' : '↘';
+                const colorClass = isPositive ? 'text-green-400' : 'text-red-400';
+                const bgColorClass = isPositive ? 'bg-green-500/10' : 'bg-red-500/10';
+                
+                marketCard.innerHTML = `
+                    <div class="relative">
+                        <div class="text-3xl font-bold ${colorClass}">${currentScenario.marketShare}%
+                            <span class="text-sm ml-1">${arrow}</span>
+                        </div>
+                        <div class="text-xs text-white/50 mt-1">
+                            Original: <span class="line-through">${baselineValues.marketShare}%</span>
+                        </div>
+                        <div class="absolute inset-0 ${bgColorClass} rounded-lg -z-10"></div>
+                    </div>
+                `;
+            }
+            
+            if (retentionCard) {
+                const isPositive = parseFloat(currentScenario.retention) >= parseFloat(baselineValues.retention);
+                const arrow = isPositive ? '↗' : '↘';
+                const colorClass = isPositive ? 'text-green-400' : 'text-red-400';
+                const bgColorClass = isPositive ? 'bg-green-500/10' : 'bg-red-500/10';
+                
+                retentionCard.innerHTML = `
+                    <div class="relative">
+                        <div class="text-3xl font-bold ${colorClass}">${currentScenario.retention}%
+                            <span class="text-sm ml-1">${arrow}</span>
+                        </div>
+                        <div class="text-xs text-white/50 mt-1">
+                            Original: <span class="line-through">${baselineValues.retention}%</span>
+                        </div>
+                        <div class="absolute inset-0 ${bgColorClass} rounded-lg -z-10"></div>
+                    </div>
+                `;
+            }
+            
+            if (newBusinessCard) {
+                const isPositive = parseFloat(currentScenario.newBusiness) >= parseFloat(baselineValues.newBusiness);
+                const arrow = isPositive ? '↗' : '↘';
+                const colorClass = isPositive ? 'text-green-400' : 'text-red-400';
+                const bgColorClass = isPositive ? 'bg-green-500/10' : 'bg-red-500/10';
+                
+                newBusinessCard.innerHTML = `
+                    <div class="relative">
+                        <div class="text-3xl font-bold ${colorClass}">${currentScenario.newBusiness}M 
+                            <span class="text-xl">SAR</span>
+                            <span class="text-sm ml-1">${arrow}</span>
+                        </div>
+                        <div class="text-xs text-white/50 mt-1">
+                            Original: <span class="line-through">${baselineValues.newBusiness}M SAR</span>
+                        </div>
+                        <div class="absolute inset-0 ${bgColorClass} rounded-lg -z-10"></div>
+                    </div>
+                `;
+            }
+        }
+
+        function resetScenarioValues() {
+            currentScenario = {...baselineValues};
+            document.getElementById('retention-slider').value = baselineValues.retention;
+            document.getElementById('retention-input').value = baselineValues.retention;
+            document.getElementById('winratio-slider').value = baselineValues.winRatio;
+            document.getElementById('winratio-input').value = baselineValues.winRatio;
+            updateScenarioValues(baselineValues.retention, baselineValues.winRatio, 'reset');
+            
+            // Reset dashboard cards to original styling
+            if (isWhatIfMode) {
+                resetDashboardCardsToOriginal();
+            }
+        }
+        
+        function resetDashboardCardsToOriginal() {
+            const gwpCard = document.querySelector('[data-card="gwp"]');
+            const marketCard = document.querySelector('[data-card="market"]');
+            const retentionCard = document.querySelector('[data-card="retention"]');
+            const newBusinessCard = document.querySelector('[data-card="newbusiness"]');
+            
+            if (gwpCard) {
+                gwpCard.innerHTML = `<div class="text-3xl font-bold text-white">${baselineValues.gwpSize}B <span class="text-xl">SAR</span></div>`;
+            }
+            if (marketCard) {
+                marketCard.innerHTML = `<div class="text-3xl font-bold text-white">${baselineValues.marketShare}%</div>`;
+            }
+            if (retentionCard) {
+                retentionCard.innerHTML = `<div class="text-3xl font-bold text-white">${baselineValues.retention}%</div>`;
+            }
+            if (newBusinessCard) {
+                newBusinessCard.innerHTML = `<div class="text-3xl font-bold text-white">${baselineValues.newBusiness}M <span class="text-xl">SAR</span></div>`;
+            }
+        }
+        
+        // Suhail Insights functionality
+        function generateInsights(retentionRate, winRatio, changedLever) {
+            const insightsContent = document.getElementById('insights-content');
+            const insightsLoading = document.getElementById('insights-loading');
+            
+            // Show loading animation
+            insightsContent.classList.add('hidden');
+            insightsLoading.classList.remove('hidden');
+            
+            // Simulate AI analysis delay (3 seconds)
+            setTimeout(() => {
+                const insight = getInsightMessage(retentionRate, winRatio, changedLever);
+                const currentDate = new Date().toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: '2-digit', 
+                    year: 'numeric'
+                });
+                const currentTime = new Date().toLocaleTimeString('en-GB', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true
+                });
+                
+                // Hide loading and show insight
+                insightsLoading.classList.add('hidden');
+                insightsContent.classList.remove('hidden');
+                insightsContent.innerHTML = `
+                    <div class="text-white/50 text-xs mb-1">[${currentDate}, ${currentTime}]</div>
+                    <div class="text-white/90">${insight}</div>
+                `;
+            }, 3000);
+        }
+        
+        function getInsightMessage(retentionRate, winRatio, changedLever) {
+            const baseline = baselineValues.retention;
+            const baselineWinRatio = baselineValues.winRatio;
+            const retentionChange = retentionRate - baseline;
+            const winRatioChange = winRatio - baselineWinRatio;
+            const retentionChangePercent = ((retentionChange / baseline) * 100).toFixed(1);
+            const winRatioChangePercent = ((winRatioChange / baselineWinRatio) * 100).toFixed(1);
+            
+            // Prioritize insights based on which lever was changed last
+            if (changedLever === 'winRatio') {
+                // Win ratio was changed - provide win ratio focused insights
+                if (winRatioChange > 2) {
+                    return `🎯 <strong>Win Ratio Impact:</strong> Winning new business should mean it is healthy new business with proper value of contribution to business. Improving win ratio by ${Math.abs(winRatioChangePercent)}% would generate ${currentScenario.additionalNewBusiness}M SAR in additional new business! Focus on deal qualification, competitive positioning, and value proposition refinement.`;
+                } else if (winRatioChange > 0) {
+                    return `📊 <strong>Win Ratio Insight:</strong> Winning new business should mean it is healthy new business with proper value of contribution to business. A ${Math.abs(winRatioChangePercent)}% improvement would add ${currentScenario.additionalNewBusiness}M SAR to new business. Consider enhancing sales training and proposal quality.`;
+                } else if (winRatioChange < -2) {
+                    return `⚠️ <strong>Win Ratio Alert:</strong> A decline of ${Math.abs(winRatioChangePercent)}% in win ratio would reduce new business by ${Math.abs(currentScenario.additionalNewBusiness)}M SAR. Immediate focus on sales process optimization and competitive intelligence is needed.`;
+                } else if (winRatioChange < 0) {
+                    return `📉 <strong>Win Ratio Warning:</strong> Win ratio decline of ${Math.abs(winRatioChangePercent)}% would impact new business. Focus on deal pipeline quality and closing techniques to prevent this scenario.`;
+                } else {
+                    return `🎯 <strong>Win Ratio Analysis:</strong> Win ratio maintained at ${winRatio}% baseline. Consider optimizing sales processes and competitive positioning for improved win rates and healthy new business growth.`;
+                }
+            } else if (changedLever === 'retention') {
+                // Retention was changed - provide retention focused insights
+                if (retentionChange > 2) {
+                    return `🎯 <strong>Retention Insight:</strong> Improving retention by ${retentionChangePercent}% would be excellent! This drives significant GWP growth through customer loyalty. Focus on customer service excellence and approval process optimization to achieve this target.`;
+                } else if (retentionChange > 0) {
+                    return `📊 <strong>Retention Impact:</strong> ${retentionChangePercent}% retention improvement shows positive momentum. Enhanced digital self-service options and proactive customer engagement could help sustain this improvement.`;
+                } else if (retentionChange < -2) {
+                    return `⚠️ <strong>Retention Alert:</strong> Retention decline of ${Math.abs(retentionChangePercent)}% requires immediate action. Focus on customer service quality and proactive outreach programs to prevent churn.`;
+                } else if (retentionChange < 0) {
+                    return `📉 <strong>Retention Warning:</strong> ${Math.abs(retentionChangePercent)}% retention dip needs attention. Improve policy servicing and claims handling to maintain customer satisfaction.`;
+                } else {
+                    return `🎯 <strong>Retention Analysis:</strong> Retention maintained at ${retentionRate}% baseline. Focus on customer service challenges related to approval processes to improve retention and maintain high NPS scores.`;
+                }
+            } else {
+                // No specific lever or initial load - use combined analysis
+                if (Math.abs(winRatioChange) > Math.abs(retentionChange * 0.5)) {
+                    return `🎯 <strong>Combined Analysis:</strong> Win ratio changes are driving primary impact. Current retention at ${retentionRate}% with win ratio at ${winRatio}% - consider optimizing both metrics for maximum growth impact.`;
+                } else if (Math.abs(retentionChange) > 0) {
+                    return `🎯 <strong>Combined Analysis:</strong> Retention changes are driving primary impact. Current performance maintains solid foundation - consider testing improvements in both areas.`;
+                } else {
+                    return `🎯 <strong>Baseline Scenario:</strong> Current metrics maintain solid performance. Ready to analyze your scenario changes...`;
+                }
+            }
+        }
+        
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Mode toggle events
+            document.getElementById('live-mode').addEventListener('click', switchToLiveMode);
+            document.getElementById('whatif-mode').addEventListener('click', switchToWhatIfMode);
+            document.getElementById('close-panel').addEventListener('click', switchToLiveMode);
+            
+            // Retention slider events
+            const retentionSlider = document.getElementById('retention-slider');
+            const retentionInput = document.getElementById('retention-input');
+            
+            retentionSlider.addEventListener('input', function() {
+                const value = parseInt(this.value);
+                retentionInput.value = value;
+                updateScenarioValues(value, currentScenario.winRatio, 'retention');
+            });
+            
+            retentionInput.addEventListener('input', function() {
+                const value = Math.max(78, Math.min(96, parseInt(this.value) || 78));
+                this.value = value;
+                retentionSlider.value = value;
+                updateScenarioValues(value, currentScenario.winRatio, 'retention');
+            });
+            
+            // Win ratio slider events
+            const winRatioSlider = document.getElementById('winratio-slider');
+            const winRatioInput = document.getElementById('winratio-input');
+            
+            winRatioSlider.addEventListener('input', function() {
+                const value = parseInt(this.value);
+                winRatioInput.value = value;
+                updateScenarioValues(currentScenario.retention, value, 'winRatio');
+            });
+            
+            winRatioInput.addEventListener('input', function() {
+                const value = Math.max(35, Math.min(65, parseInt(this.value) || 35));
+                this.value = value;
+                winRatioSlider.value = value;
+                updateScenarioValues(currentScenario.retention, value, 'winRatio');
+            });
+            
+            // Reset button
+            document.getElementById('reset-scenario').addEventListener('click', resetScenarioValues);
+            
+            // Window resize handler to maintain proper scaling
+            window.addEventListener('resize', function() {
+                if (isWhatIfMode) {
+                    // Recalculate scaling when window resizes
+                    const container = document.querySelector('.container');
+                    const panelWidth = 280; // Reduced panel effective width
+                    const viewportWidth = window.innerWidth;
+                    const availableWidth = viewportWidth - panelWidth - 8; // Minimal padding
+                    const scaleRatio = Math.min(availableWidth / viewportWidth, 0.98); // Much higher max scale
+                    
+                    container.style.transform = `scale(${scaleRatio})`;
+                    container.style.width = `${100 / scaleRatio}%`;
+                    container.style.marginRight = `${panelWidth - 50}px`; // Much closer to panel
+                } else {
+                    // Fix Live mode centering on resize
+                    const container = document.querySelector('.container');
+                    container.style.marginRight = 'auto';
+                    container.style.marginLeft = 'auto'; // Ensure proper centering with both margins auto
+                    container.style.transform = 'scale(1)';
+                    container.style.transformOrigin = 'center center';
+                    container.style.width = 'auto';
+                }
+            });
+            
+            // Add data attributes to cards for easy updating
+            addDataAttributesToCards();
+        });
+
+        function addDataAttributesToCards() {
+            // Add data attributes to dashboard cards for easy identification
+            const cards = document.querySelectorAll('.grid > div');
+            cards.forEach((card, index) => {
+                const text = card.textContent.toLowerCase();
+                if (text.includes('gwp size')) {
+                    card.querySelector('.text-3xl').setAttribute('data-card', 'gwp');
+                } else if (text.includes('market share')) {
+                    card.querySelector('.text-3xl').setAttribute('data-card', 'market');
+                } else if (text.includes('net retention')) {
+                    card.querySelector('.text-3xl').setAttribute('data-card', 'retention');
+                } else if (text.includes('new business value')) {
+                    card.querySelector('.text-3xl').setAttribute('data-card', 'newbusiness');
+                }
+            });
+            
+            // Add dashboard-section class to main sections
+            document.querySelectorAll('.mb-8').forEach(section => {
+                section.classList.add('dashboard-section');
+            });
+        }
+    </script>
+
+    <!-- D3.js Library -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    
+    <!-- GWP Growth Trend Chart -->
+    <script>
+        // Load GWP Growth Trend data and render chart
+        async function loadGWPChart() {
+            try {
+                console.log('Loading GWP chart data...');
+                const response = await fetch('/api/sme/gwp-growth-trend');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received data:', data);
+                
+                if (!data || data.length === 0) {
+                    document.getElementById('gwp-chart').innerHTML = 
+                        '<div class="flex items-center justify-center h-full text-white/50">No data available</div>';
+                    return;
+                }
+                
+                renderGWPChart(data);
+            } catch (error) {
+                console.error('Error loading GWP data:', error);
+                document.getElementById('gwp-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50">Error loading data: ${error.message}</div>`;
+            }
+        }
+        
+        function renderGWPChart(data) {
+            // Clear any existing chart
+            d3.select("#gwp-chart").selectAll("*").remove();
+            
+            // Set dimensions and margins - increase bottom margin for rotated labels
+            const margin = {top: 30, right: 80, bottom: 60, left: 60};
+            const width = document.getElementById('gwp-chart').offsetWidth - margin.left - margin.right;
+            const height = 192 - margin.top - margin.bottom; // h-48 = 192px
+            
+            // Create SVG
+            const svg = d3.select("#gwp-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            // Month mapping for parsing dates like "Jul 2024"
+            const monthMap = {
+                'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+            };
+            
+            // Process data and create proper dates
+            data.forEach(d => {
+                // Parse "Jul 2024" format
+                const parts = d.month.split(' ');
+                if (parts.length >= 2) {
+                    const monthName = parts[0];
+                    const year = parseInt(parts[1]);
+                    const monthNum = monthMap[monthName];
+                    
+                    if (monthNum !== undefined && !isNaN(year)) {
+                        d.monthDate = new Date(year, monthNum, 1);
+                        d.gwp_value = +d.gwp_value;
+                        d.sortKey = year * 12 + monthNum; // For sorting
+                    }
+                } else {
+                    console.warn(`Cannot parse month: ${d.month}`);
+                }
+            });
+            
+            // Filter out invalid dates and sort chronologically
+            data = data.filter(d => d.monthDate).sort((a, b) => a.sortKey - b.sortKey);
+            
+            console.log('Processed data for chart:', data);
+            
+            if (data.length === 0) {
+                svg.append("text")
+                    .attr("x", width / 2)
+                    .attr("y", height / 2)
+                    .attr("text-anchor", "middle")
+                    .style("fill", "rgba(255,255,255,0.5)")
+                    .text("No valid data to display");
+                return;
+            }
+            
+            // Set scales
+            const xScale = d3.scaleTime()
+                .domain(d3.extent(data, d => d.monthDate))
+                .range([0, width]);
+            
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.gwp_value)])
+                .nice()
+                .range([height, 0]);
+            
+            // Create line generator
+            const line = d3.line()
+                .x(d => xScale(d.monthDate))
+                .y(d => yScale(d.gwp_value))
+                .curve(d3.curveMonotoneX);
+            
+            // Add X axis with month labels - show every other month
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale)
+                    .tickFormat(d3.timeFormat("%b %y"))
+                    .ticks(d3.timeMonth.every(2)))  // Show every 2 months
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.8)")
+                .style("font-size", "10px")
+                .attr("transform", "rotate(-35)")
+                .style("text-anchor", "end")
+                .attr("dx", "-0.5em")
+                .attr("dy", "0.15em");
+            
+            // Add Y axis
+            svg.append("g")
+                .call(d3.axisLeft(yScale)
+                    .ticks(5)
+                    .tickFormat(d3.format(".1s")))
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.7)")
+                .style("font-size", "11px");
+            
+            // Style axis lines and make them more visible
+            svg.selectAll(".domain")
+                .style("stroke", "rgba(255,255,255,0.4)");
+            
+            svg.selectAll(".tick line")
+                .style("stroke", "rgba(255,255,255,0.2)");
+            
+            // Add the main line
+            svg.append("path")
+                .datum(data)
+                .attr("fill", "none")
+                .attr("stroke", "#3b82f6")
+                .attr("stroke-width", 3)
+                .attr("d", line);
+            
+            // Add data points
+            svg.selectAll(".dot")
+                .data(data)
+                .enter().append("circle")
+                .attr("class", "dot")
+                .attr("cx", d => xScale(d.monthDate))
+                .attr("cy", d => yScale(d.gwp_value))
+                .attr("r", 4)
+                .attr("fill", "#3b82f6")
+                .attr("stroke", "white")
+                .attr("stroke-width", 1);
+            
+            // Remove the old title that was inside the SVG
+            
+            // Add tooltips
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.8)")
+                .style("color", "white")
+                .style("padding", "8px")
+                .style("border-radius", "4px")
+                .style("font-size", "12px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000");
+            
+            // Add interactive overlay
+            svg.selectAll(".overlay")
+                .data(data)
+                .enter().append("circle")
+                .attr("class", "overlay")
+                .attr("cx", d => xScale(d.monthDate))
+                .attr("cy", d => yScale(d.gwp_value))
+                .attr("r", 8)
+                .attr("fill", "transparent")
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`<strong>${d.month}</strong><br/>GWP: ${d3.format(".1f")(d.gwp_value)} M SAR`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+        }
+        
+        // Load chart when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadGWPChart();
+            loadFunnelSizeChart();
+            loadFunnelCoverageChart();
+            loadRenewalHeatmap();
+            loadBudgetFitChart();
+            loadRenewalsPerformanceChart();
+            loadNewBusinessPerformanceChart();
+            loadOverallRenewalProbabilityChart();
+            loadCompetitorOverviewChart();
+            renderWinRatioChart();
+        });
+    </script>
+
+    <!-- Funnel Size Trend Chart -->
+    <script>
+        // Load Funnel Size Trend data and render chart
+        async function loadFunnelSizeChart() {
+            try {
+                console.log('Loading Funnel Size chart data...');
+                const response = await fetch('/api/sme/funnel-size-trend');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received data:', data);
+                
+                if (!data || data.length === 0) {
+                    document.getElementById('funnel-chart').innerHTML = 
+                        '<div class="flex items-center justify-center h-full text-white/50">No data available</div>';
+                    return;
+                }
+                
+                renderFunnelSizeChart(data);
+            } catch (error) {
+                console.error('Error loading Funnel Size data:', error);
+                document.getElementById('funnel-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50">Error loading data: ${error.message}</div>`;
+            }
+        }
+        
+        function renderFunnelSizeChart(data) {
+            // Clear any existing chart
+            d3.select("#funnel-chart").selectAll("*").remove();
+            
+            // Set dimensions and margins - increase bottom margin for rotated labels
+            const margin = {top: 20, right: 50, bottom: 40, left: 50};
+            const width = document.getElementById('funnel-chart').offsetWidth - margin.left - margin.right;
+            const height = 128 - margin.top - margin.bottom; // h-32 = 128px
+            
+            // Create SVG
+            const svg = d3.select("#funnel-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            // Month mapping for parsing dates like "Jul 2024"
+            const monthMap = {
+                'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+            };
+            
+            // Process data and create proper dates
+            data.forEach(d => {
+                // Parse "Jul 2024" format
+                const parts = d.month.split(' ');
+                if (parts.length >= 2) {
+                    const monthName = parts[0];
+                    const year = parseInt(parts[1]);
+                    
+                    if (monthMap.hasOwnProperty(monthName) && !isNaN(year)) {
+                        d.monthDate = new Date(year, monthMap[monthName], 1);
+                        d.sortKey = year * 12 + monthMap[monthName]; // For chronological sorting
+                    }
+                }
+            });
+            
+            // Filter and sort data chronologically
+            data = data.filter(d => d.monthDate).sort((a, b) => a.sortKey - b.sortKey);
+            
+            console.log('Processed funnel data for chart:', data);
+            
+            // Set up scales
+            const xScale = d3.scaleTime()
+                .domain(d3.extent(data, d => d.monthDate))
+                .range([0, width]);
+            
+            const yScale = d3.scaleLinear()
+                .domain(d3.extent(data, d => d.funnel_count))
+                .nice()
+                .range([height, 0]);
+            
+            // Create line generator
+            const line = d3.line()
+                .x(d => xScale(d.monthDate))
+                .y(d => yScale(d.funnel_count))
+                .curve(d3.curveMonotoneX);
+            
+            // Add gradient definition
+            const gradient = svg.append("defs")
+                .append("linearGradient")
+                .attr("id", "funnelGradient")
+                .attr("gradientUnits", "userSpaceOnUse")
+                .attr("x1", 0).attr("y1", height)
+                .attr("x2", 0).attr("y2", 0);
+            
+            gradient.append("stop")
+                .attr("offset", "0%")
+                .attr("stop-color", "#06b6d4")
+                .attr("stop-opacity", 0.1);
+            
+            gradient.append("stop")
+                .attr("offset", "100%")
+                .attr("stop-color", "#06b6d4")
+                .attr("stop-opacity", 0.6);
+            
+            // Add area under the line
+            const area = d3.area()
+                .x(d => xScale(d.monthDate))
+                .y0(height)
+                .y1(d => yScale(d.funnel_count))
+                .curve(d3.curveMonotoneX);
+            
+            svg.append("path")
+                .datum(data)
+                .attr("fill", "url(#funnelGradient)")
+                .attr("d", area);
+            
+            // Add X axis
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale)
+                    .tickFormat(d3.timeFormat("%b %Y"))
+                    .ticks(d3.timeMonth.every(2)))
+                .selectAll("text")
+                .style("fill", "white")
+                .style("font-size", "10px")
+                .attr("transform", "rotate(-45)")
+                .style("text-anchor", "end");
+            
+            // Add Y axis
+            svg.append("g")
+                .call(d3.axisLeft(yScale)
+                    .tickFormat(d3.format(".0f"))
+                    .ticks(Math.max(2, Math.ceil((yScale.domain()[1] - yScale.domain()[0]) / 10))))
+                .selectAll("text")
+                .style("fill", "white")
+                .style("font-size", "10px");
+            
+            // Style axis lines
+            svg.selectAll(".domain, .tick line")
+                .style("stroke", "rgba(255,255,255,0.3)");
+            
+            // Add the line
+            svg.append("path")
+                .datum(data)
+                .attr("fill", "none")
+                .attr("stroke", "#06b6d4")
+                .attr("stroke-width", 2)
+                .attr("d", line);
+            
+            // Add data points
+            svg.selectAll(".dot")
+                .data(data)
+                .enter().append("circle")
+                .attr("class", "dot")
+                .attr("cx", d => xScale(d.monthDate))
+                .attr("cy", d => yScale(d.funnel_count))
+                .attr("r", 3)
+                .attr("fill", "#06b6d4")
+                .attr("stroke", "white")
+                .attr("stroke-width", 1);
+            
+            // Add tooltips
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.8)")
+                .style("color", "white")
+                .style("padding", "8px")
+                .style("border-radius", "4px")
+                .style("font-size", "12px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000");
+            
+            // Add interactive overlay
+            svg.selectAll(".overlay")
+                .data(data)
+                .enter().append("circle")
+                .attr("class", "overlay")
+                .attr("cx", d => xScale(d.monthDate))
+                .attr("cy", d => yScale(d.funnel_count))
+                .attr("r", 8)
+                .attr("fill", "transparent")
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`<strong>${d.month}</strong><br/>Funnel Size: ${d3.format(",")(d.funnel_count)} Count`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+        }
+    </script>
+
+    <!-- Funnel Coverage Chart -->
+    <script>
+        // Load Funnel Coverage data and render chart
+        async function loadFunnelCoverageChart() {
+            try {
+                console.log('Loading Funnel Coverage data...');
+                const response = await fetch('/api/sme/funnel-coverage');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received funnel coverage data:', data);
+                
+                renderFunnelCoverageChart(data);
+            } catch (error) {
+                console.error('Error loading funnel coverage data:', error);
+                document.getElementById('funnel-coverage-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50 text-xs">Error loading data</div>`;
+            }
+        }
+
+        function renderFunnelCoverageChart(data) {
+            // Clear any existing chart
+            d3.select("#funnel-coverage-chart").selectAll("*").remove();
+            
+            // Set dimensions and margins - adjusted for smaller width
+            const margin = {top: 20, right: 15, bottom: 50, left: 35};
+            const width = document.getElementById('funnel-coverage-chart').offsetWidth - margin.left - margin.right;
+            const height = 128 - margin.top - margin.bottom; // h-32 = 128px
+            
+            // Create SVG
+            const svg = d3.select("#funnel-coverage-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            // Month mapping for parsing dates like "Jul 2024"
+            const monthMap = {
+                'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+            };
+            
+            // Process data and create proper dates for sorting
+            data.forEach(d => {
+                const parts = d.month.split(' ');
+                if (parts.length >= 2) {
+                    const monthName = parts[0];
+                    const year = parseInt(parts[1]);
+                    
+                    if (monthMap.hasOwnProperty(monthName) && !isNaN(year)) {
+                        d.sortKey = year * 12 + monthMap[monthName]; // For chronological sorting
+                        d.year = year;
+                        d.monthName = monthName;
+                    }
+                }
+            });
+            
+            // Filter and sort data chronologically
+            data = data.filter(d => d.sortKey).sort((a, b) => a.sortKey - b.sortKey);
+            
+            console.log('Processed funnel coverage data:', data);
+            
+            // Create scales
+            const xScale = d3.scaleBand()
+                .domain(data.map(d => d.month))
+                .range([0, width])
+                .padding(0.15); // Reduced padding for smaller width
+            
+            const yScale = d3.scaleLinear()
+                .domain([0, 100]) // Always 0-100% range
+                .range([height, 0]);
+            
+            // Add X axis (month names only)
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale)
+                    .tickFormat(d => d.split(' ')[0])) // Show only month name
+                .selectAll("text")
+                .style("fill", "white")
+                .style("font-size", "9px")
+                .attr("transform", "rotate(-45)")
+                .style("text-anchor", "end");
+            
+            // Add year labels centered under groups of months
+            const yearGroups = d3.group(data, d => d.year);
+            yearGroups.forEach((months, year) => {
+                const firstMonth = months[0];
+                const lastMonth = months[months.length - 1];
+                const startX = xScale(firstMonth.month) + xScale.bandwidth() / 2;
+                const endX = xScale(lastMonth.month) + xScale.bandwidth() / 2;
+                const centerX = (startX + endX) / 2;
+                
+                // Add year label
+                svg.append("text")
+                    .attr("x", centerX)
+                    .attr("y", height + 35)
+                    .attr("text-anchor", "middle")
+                    .style("fill", "rgba(255,255,255,0.6)")
+                    .style("font-size", "8px")
+                    .style("font-weight", "500")
+                    .text(year);
+                
+                // Add subtle line above year label if there are multiple years
+                if (yearGroups.size > 1) {
+                    svg.append("line")
+                        .attr("x1", startX - 5)
+                        .attr("x2", endX + 5)
+                        .attr("y1", height + 30)
+                        .attr("y2", height + 30)
+                        .style("stroke", "rgba(255,255,255,0.3)")
+                        .style("stroke-width", 0.5);
+                }
+            });
+            
+            // Add Y axis with fewer ticks for smaller space
+            svg.append("g")
+                .call(d3.axisLeft(yScale)
+                    .tickFormat(d => d + "%")
+                    .ticks(4))
+                .selectAll("text")
+                .style("fill", "white")
+                .style("font-size", "9px");
+            
+            // Style axis lines
+            svg.selectAll(".domain, .tick line")
+                .style("stroke", "rgba(255,255,255,0.3)");
+            
+            // Create bars
+            svg.selectAll(".bar")
+                .data(data)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", d => xScale(d.month))
+                .attr("width", xScale.bandwidth())
+                .attr("y", d => yScale(d.coverage_pct))
+                .attr("height", d => height - yScale(d.coverage_pct))
+                .attr("fill", "#14b8a6") // teal-500
+                .attr("rx", 2);
+            
+            // Add tooltips
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "funnel-tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.8)")
+                .style("color", "white")
+                .style("padding", "6px")
+                .style("border-radius", "4px")
+                .style("font-size", "11px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000");
+            
+            // Add interactive overlay
+            svg.selectAll(".overlay")
+                .data(data)
+                .enter().append("rect")
+                .attr("class", "overlay")
+                .attr("x", d => xScale(d.month))
+                .attr("width", xScale.bandwidth())
+                .attr("y", 0)
+                .attr("height", height)
+                .attr("fill", "transparent")
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`<strong>${d.month}</strong><br/>Coverage: ${d.coverage_pct}%`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+        }
+    </script>
+    
+    <!-- Renewal Heat Map Chart -->
+    <script>
+        // Load Renewal Heat Map data and render heatmap
+        async function loadRenewalHeatmap() {
+            try {
+                console.log('Loading Renewal Heatmap data...');
+                const response = await fetch('/api/sme/renewal-heatmap');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received heatmap data:', data);
+                
+                if (!data || data.length === 0) {
+                    document.getElementById('renewal-heatmap').innerHTML = 
+                        '<div class="flex items-center justify-center h-full text-white/50">No data available</div>';
+                    return;
+                }
+                
+                renderRenewalHeatmap(data);
+            } catch (error) {
+                console.error('Error loading heatmap data:', error);
+                document.getElementById('renewal-heatmap').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50">Error loading data: ${error.message}</div>`;
+            }
+        }
+        
+        function renderRenewalHeatmap(rawData) {
+            // Clear any existing chart
+            d3.select("#renewal-heatmap").selectAll("*").remove();
+            
+            // Set dimensions and margins
+            const margin = {top: 40, right: 100, bottom: 40, left: 80};
+            const width = document.getElementById('renewal-heatmap').offsetWidth - margin.left - margin.right;
+            const height = 192 - margin.top - margin.bottom; // h-48 = 192px
+            
+            // Create SVG
+            const svg = d3.select("#renewal-heatmap")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            // Process data to create a proper matrix structure
+            // Parse and sort months chronologically
+            const monthMap = {
+                'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+            };
+            
+            const monthsWithDates = [...new Set(rawData.map(d => d.month))].map(month => {
+                const parts = month.split(' ');
+                if (parts.length >= 2) {
+                    const monthName = parts[0];
+                    const year = parseInt(parts[1]);
+                    const monthNum = monthMap[monthName];
+                    
+                    if (monthNum !== undefined && !isNaN(year)) {
+                        return {
+                            month: month,
+                            sortKey: year * 12 + monthNum // Create sort key for chronological order
+                        };
+                    }
+                }
+                return { month: month, sortKey: 0 }; // Fallback for unparseable months
+            });
+            
+            // Sort chronologically and extract month names
+            const months = monthsWithDates
+                .sort((a, b) => a.sortKey - b.sortKey)
+                .map(item => item.month);
+            
+            const buckets = [30, 60, 90]; // Fixed order for days
+            
+            // Create matrix data structure
+            const matrixData = [];
+            buckets.forEach((bucket, bucketIndex) => {
+                months.forEach((month, monthIndex) => {
+                    const dataPoint = rawData.find(d => d.month === month && d.bucket_days === bucket);
+                    matrixData.push({
+                        month: month,
+                        bucket: bucket,
+                        monthIndex: monthIndex,
+                        bucketIndex: bucketIndex,
+                        value: dataPoint ? dataPoint.renewal_value : 0
+                    });
+                });
+            });
+            
+            console.log('Processed matrix data:', matrixData);
+            
+            // Get value range for color scale
+            const maxValue = d3.max(matrixData, d => d.value);
+            const minValue = d3.min(matrixData.filter(d => d.value > 0), d => d.value) || 0;
+            
+            // Create scales
+            const xScale = d3.scaleBand()
+                .domain(months)
+                .range([0, width])
+                .padding(0.1);
+            
+            const yScale = d3.scaleBand()
+                .domain(buckets.map(d => d + ' days'))
+                .range([0, height])
+                .padding(0.1);
+            
+            // Create color scale - blue gradient from light to dark
+            const colorScale = d3.scaleSequential()
+                .interpolator(d3.interpolateBlues)
+                .domain([0, maxValue]);
+            
+            // Add X axis - show every other month starting from the most recent
+            // Reverse the months array to start from the latest, then select every other one, then reverse back
+            const monthsReversed = [...months].reverse();
+            const monthsToShowReversed = monthsReversed.filter((month, index) => index % 2 === 0);
+            const monthsToShow = monthsToShowReversed.reverse(); // Back to chronological order but with latest included
+            
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale).tickValues(monthsToShow))
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.8)")
+                .style("font-size", "10px")
+                .attr("transform", "rotate(-25)")
+                .style("text-anchor", "end")
+                .attr("dx", "-0.5em")
+                .attr("dy", "0.15em");
+            
+            // Add Y axis
+            svg.append("g")
+                .call(d3.axisLeft(yScale))
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.8)")
+                .style("font-size", "11px");
+            
+            // Style axis lines
+            svg.selectAll(".domain")
+                .style("stroke", "rgba(255,255,255,0.4)");
+            
+            svg.selectAll(".tick line")
+                .style("stroke", "rgba(255,255,255,0.2)");
+            
+            // Create heatmap cells
+            svg.selectAll(".heatmap-cell")
+                .data(matrixData)
+                .enter()
+                .append("rect")
+                .attr("class", "heatmap-cell")
+                .attr("x", d => xScale(d.month))
+                .attr("y", d => yScale(d.bucket + ' days'))
+                .attr("width", xScale.bandwidth())
+                .attr("height", yScale.bandwidth())
+                .attr("fill", d => d.value === 0 ? "#374151" : colorScale(d.value))
+                .attr("stroke", "rgba(255,255,255,0.2)")
+                .attr("stroke-width", 1)
+                .attr("rx", 2);
+            
+            // Remove the value labels inside cells - they will only show on hover
+            
+            // Add tooltips
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "heatmap-tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.8)")
+                .style("color", "white")
+                .style("padding", "8px")
+                .style("border-radius", "4px")
+                .style("font-size", "12px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000");
+            
+            // Add interactive overlay
+            svg.selectAll(".cell-overlay")
+                .data(matrixData)
+                .enter()
+                .append("rect")
+                .attr("class", "cell-overlay")
+                .attr("x", d => xScale(d.month))
+                .attr("y", d => yScale(d.bucket + ' days'))
+                .attr("width", xScale.bandwidth())
+                .attr("height", yScale.bandwidth())
+                .attr("fill", "transparent")
+                .on("mouseover", function(event, d) {
+                    tooltip.transition().style("opacity", .9);
+                    tooltip.html(`<strong>${d.month}</strong><br/>${d.bucket} Days<br/>Value: ${d.value.toFixed(1)}M SAR`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition().style("opacity", 0);
+                });
+            
+            // Add legend
+            const legendWidth = 15;
+            const legendHeight = height * 0.6;
+            const legendX = width + 20;
+            const legendY = height * 0.2;
+            
+            // Create legend gradient
+            const defs = svg.append("defs");
+            const gradient = defs.append("linearGradient")
+                .attr("id", "heatmap-gradient")
+                .attr("x1", "0%")
+                .attr("y1", "100%")
+                .attr("x2", "0%")
+                .attr("y2", "0%");
+            
+            // Add gradient stops
+            const numStops = 10;
+            for (let i = 0; i <= numStops; i++) {
+                const value = minValue + (maxValue - minValue) * (i / numStops);
+                gradient.append("stop")
+                    .attr("offset", `${i * 10}%`)
+                    .attr("stop-color", colorScale(value));
+            }
+            
+            // Add legend rectangle
+            svg.append("rect")
+                .attr("x", legendX)
+                .attr("y", legendY)
+                .attr("width", legendWidth)
+                .attr("height", legendHeight)
+                .style("fill", "url(#heatmap-gradient)")
+                .attr("stroke", "rgba(255,255,255,0.4)")
+                .attr("stroke-width", 1);
+            
+            // Add legend labels
+            svg.append("text")
+                .attr("x", legendX + legendWidth + 5)
+                .attr("y", legendY - 5)
+                .style("fill", "rgba(255,255,255,0.7)")
+                .style("font-size", "10px")
+                .text(`${maxValue.toFixed(1)}M`);
+            
+            svg.append("text")
+                .attr("x", legendX + legendWidth + 5)
+                .attr("y", legendY + legendHeight + 12)
+                .style("fill", "rgba(255,255,255,0.7)")
+                .style("font-size", "10px")
+                .text(`${minValue.toFixed(1)}M`);
+            
+            // Add legend title
+            svg.append("text")
+                .attr("x", legendX + legendWidth + 5)
+                .attr("y", legendY - 20)
+                .style("fill", "rgba(255,255,255,0.8)")
+                .style("font-size", "11px")
+                .style("font-weight", "bold")
+                .text("SAR (M)");
+        }
+    </script>
+    
+    <!-- Win Ratio vs Probability Chart -->
+    <script>
+        function renderWinRatioChart() {
+            // Default data - can be replaced with real data later
+            const data = [
+                { label: "Actual Win Rate", value: 45, color: "#f97316" }, // orange-500
+                { label: "Suhail's Prediction", value: 42, color: "#fb923c" } // orange-400
+            ];
+            
+            // Clear any existing chart
+            d3.select("#win-ratio-chart").selectAll("*").remove();
+            
+            // Set dimensions - increased height to better fill the card
+            const margin = { top: 15, right: 45, bottom: 15, left: 60 };
+            const width = document.getElementById('win-ratio-chart').offsetWidth - margin.left - margin.right;
+            const height = 96 - margin.top - margin.bottom; // h-24 = 96px, increased to better fill card
+            
+            // Create SVG
+            const svg = d3.select("#win-ratio-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            // Create scales
+            const xScale = d3.scaleLinear()
+                .domain([0, 100])
+                .range([0, width]);
+            
+            const yScale = d3.scaleBand()
+                .domain(data.map(d => d.label))
+                .range([0, height])
+                .padding(0.3); // Original padding
+            
+            // Create bars
+            svg.selectAll(".bar")
+                .data(data)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", 0)
+                .attr("y", d => yScale(d.label))
+                .attr("width", d => xScale(d.value))
+                .attr("height", yScale.bandwidth())
+                .attr("fill", d => d.color)
+                .attr("rx", 3);
+            
+            // Add percentage labels on bars
+            svg.selectAll(".bar-label")
+                .data(data)
+                .enter().append("text")
+                .attr("class", "bar-label")
+                .attr("x", d => xScale(d.value) + 5)
+                .attr("y", d => yScale(d.label) + yScale.bandwidth() / 2)
+                .attr("dy", "0.35em")
+                .style("fill", "rgba(255,255,255,0.9)")
+                .style("font-size", "12px")
+                .style("font-weight", "600")
+                .text(d => d.value + "%");
+            
+            // Add category labels
+            svg.selectAll(".category-label")
+                .data(data)
+                .enter().append("text")
+                .attr("class", "category-label")
+                .attr("x", -8)
+                .attr("y", d => yScale(d.label) + yScale.bandwidth() / 2)
+                .attr("dy", "0.35em")
+                .style("fill", "rgba(255,255,255,0.8)")
+                .style("font-size", "10px")
+                .style("font-weight", "400")
+                .style("text-anchor", "end")
+                .text(d => d.label === "Actual Win Rate" ? "Actual" : "Prediction"); // Shorter labels for compact size
+        }
+    </script>
+
+    <!-- Budget Fit Analysis Chart -->
+    <script>
+        // Load Budget Fit Analysis data and render horizontal bar charts
+        async function loadBudgetFitChart() {
+            try {
+                console.log('Loading Budget Fit Analysis data...');
+                const response = await fetch('/api/sme/budget-fit-analysis');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received budget fit analysis data:', data);
+                
+                renderBudgetFitChart(data);
+            } catch (error) {
+                console.error('Error loading budget fit analysis data:', error);
+                document.getElementById('budget-fit-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50 text-xs">Error loading data</div>`;
+            }
+        }
+
+        function renderBudgetFitChart(data) {
+            // Clear any existing chart
+            d3.select("#budget-fit-chart").selectAll("*").remove();
+            
+            // Set dimensions and margins - increased height to better fill the card
+            const margin = {top: 15, right: 60, bottom: 15, left: 80};
+            const width = document.getElementById('budget-fit-chart').offsetWidth - margin.left - margin.right;
+            const height = 144 - margin.top - margin.bottom; // h-36 = 144px, increased to better fill card
+            
+            // Create SVG
+            const svg = d3.select("#budget-fit-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            console.log('Rendering budget fit chart with data:', data);
+            
+            // Create scales
+            const xScale = d3.scaleLinear()
+                .domain([0, 100])
+                .range([0, width]);
+            
+            const yScale = d3.scaleBand()
+                .domain(data.map(d => d.metric))
+                .range([0, height])
+                .padding(0.2);
+            
+            // Create bars with different colors for each metric
+            const colors = ['#3b82f6', '#14b8a6', '#f59e0b']; // blue, teal, amber
+            
+            svg.selectAll(".bar")
+                .data(data)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", 0)
+                .attr("y", d => yScale(d.metric))
+                .attr("width", d => xScale(d.percentage))
+                .attr("height", yScale.bandwidth())
+                .attr("fill", (d, i) => colors[i % colors.length])
+                .attr("rx", 2);
+            
+            // Add percentage labels on the right of bars
+            svg.selectAll(".value-label")
+                .data(data)
+                .enter().append("text")
+                .attr("class", "value-label")
+                .attr("x", d => xScale(d.percentage) + 5)
+                .attr("y", d => yScale(d.metric) + yScale.bandwidth() / 2)
+                .attr("dy", "0.35em")
+                .style("fill", "rgba(255,255,255,0.9)")
+                .style("font-size", "10px")
+                .style("font-weight", "500")
+                .text(d => d.percentage + "%");
+            
+            // Add metric labels on the left
+            svg.selectAll(".metric-label")
+                .data(data)
+                .enter().append("text")
+                .attr("class", "metric-label")
+                .attr("x", -8)
+                .attr("y", d => yScale(d.metric) + yScale.bandwidth() / 2)
+                .attr("dy", "0.35em")
+                .style("fill", "rgba(255,255,255,0.8)")
+                .style("font-size", "9px")
+                .style("font-weight", "400")
+                .style("text-anchor", "end")
+                .text(d => {
+                    // Shorten labels for compact display
+                    if (d.metric === 'Budget Fit Analysis') return 'Budget Fit';
+                    if (d.metric === 'Proposal Diversity') return 'Diversity';
+                    if (d.metric === 'Competitor Win/Loss') return 'Comp. Win/Loss';
+                    return d.metric;
+                });
+            
+            // Add tooltips
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "budget-fit-tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.8)")
+                .style("color", "white")
+                .style("padding", "6px")
+                .style("border-radius", "4px")
+                .style("font-size", "11px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000");
+            
+            // Add interactive overlay
+            svg.selectAll(".bar-overlay")
+                .data(data)
+                .enter().append("rect")
+                .attr("class", "bar-overlay")
+                .attr("x", 0)
+                .attr("y", d => yScale(d.metric))
+                .attr("width", width)
+                .attr("height", yScale.bandwidth())
+                .attr("fill", "transparent")
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`<strong>${d.metric}</strong><br/>${d.percentage}%`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+        }
+    </script>
+
+    <!-- Renewals Performance Pie Chart -->
+    <script>
+        // Load Renewals Performance data and render pie chart
+        async function loadRenewalsPerformanceChart() {
+            try {
+                console.log('Loading Renewals Performance data...');
+                const response = await fetch('/api/sme/renewals-performance');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received renewals performance data:', data);
+                
+                renderRenewalsPerformanceChart(data);
+            } catch (error) {
+                console.error('Error loading renewals performance data:', error);
+                document.getElementById('renewals-performance-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50 text-sm">Error loading data</div>`;
+            }
+        }
+
+        function renderRenewalsPerformanceChart(data) {
+            // Clear any existing chart
+            d3.select("#renewals-performance-chart").selectAll("*").remove();
+            
+            // Set dimensions - adjusted for smaller height
+            const width = document.getElementById('renewals-performance-chart').offsetWidth;
+            const height = 160; // h-40 = 160px (reduced from h-48)
+            const radius = Math.min(width, height) / 2 - 20;
+            
+            // Create SVG centered in the container
+            const svg = d3.select("#renewals-performance-chart")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .append("g")
+                .attr("transform", `translate(${width/2}, ${height/2})`);
+            
+            console.log('Rendering renewals performance pie chart with data:', data);
+            
+            // Create pie generator
+            const pie = d3.pie()
+                .value(d => d.value)
+                .sort(null);
+            
+            // Create arc generator
+            const arc = d3.arc()
+                .innerRadius(0)
+                .outerRadius(radius);
+            
+            // Create pie data
+            const pieData = pie(data.data);
+            
+            // Create pie slices
+            svg.selectAll('.slice')
+                .data(pieData)
+                .enter()
+                .append('path')
+                .attr('class', 'slice')
+                .attr('d', arc)
+                .attr('fill', d => d.data.color)
+                .attr('stroke', 'rgba(255,255,255,0.2)')
+                .attr('stroke-width', 2);
+            
+            // Add percentage label in the bottom part of the chart
+            svg.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', `${radius * 0.6}px`)  // Position in bottom part
+                .style('fill', 'white')
+                .style('font-size', '24px')
+                .style('font-weight', 'bold')
+                .text(`${data.performance_pct}%`);
+            
+            svg.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', `${radius * 0.8}px`)  // Position below percentage
+                .style('fill', 'rgba(255,255,255,0.7)')
+                .style('font-size', '12px')
+                .text('Achieved');
+            
+            // Add tooltips
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "renewals-tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.8)")
+                .style("color", "white")
+                .style("padding", "8px")
+                .style("border-radius", "4px")
+                .style("font-size", "12px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000");
+            
+            // Add interactive behavior
+            svg.selectAll('.slice')
+                .on('mouseover', function(event, d) {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .attr('transform', function() {
+                            const centroid = arc.centroid(d);
+                            return `translate(${centroid[0] * 0.1}, ${centroid[1] * 0.1})`;
+                        });
+                    
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`<strong>${d.data.label}</strong><br/>${d.data.value}%`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on('mouseout', function(d) {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .attr('transform', 'translate(0,0)');
+                    
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+        }
+    </script>
+
+    <!-- New Business Performance Pie Chart -->
+    <script>
+        // Load New Business Performance data and render pie chart
+        async function loadNewBusinessPerformanceChart() {
+            try {
+                console.log('Loading New Business Performance chart data...');
+                const response = await fetch('/api/sme/new-business-performance');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received data:', data);
+                
+                if (!data || !data.data) {
+                    document.getElementById('new-business-performance-chart').innerHTML = 
+                        '<div class="flex items-center justify-center h-full text-white/50">No data available</div>';
+                    return;
+                }
+                
+                renderNewBusinessPerformanceChart(data);
+            } catch (error) {
+                console.error('Error loading New Business Performance data:', error);
+                document.getElementById('new-business-performance-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50">Error loading data: ${error.message}</div>`;
+            }
+        }
+        
+        function renderNewBusinessPerformanceChart(data) {
+            // Clear any existing chart
+            d3.select("#new-business-performance-chart").selectAll("*").remove();
+            
+            // Set dimensions
+            const width = document.getElementById('new-business-performance-chart').offsetWidth;
+            const height = 160; // h-40 = 160px
+            const radius = Math.min(width, height) / 2 - 10;
+            
+            // Create SVG
+            const svg = d3.select("#new-business-performance-chart")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .append("g")
+                .attr("transform", `translate(${width/2}, ${height/2})`);
+            
+            console.log('Rendering new business performance pie chart with data:', data);
+            
+            // Create pie generator
+            const pie = d3.pie()
+                .value(d => d.value)
+                .sort(null);
+            
+            // Create arc generator
+            const arc = d3.arc()
+                .innerRadius(0)
+                .outerRadius(radius);
+            
+            // Create pie slices
+            const slices = svg.selectAll('.slice')
+                .data(pie(data.data))
+                .enter()
+                .append('g')
+                .attr('class', 'slice');
+            
+            // Add pie slices
+            slices.append('path')
+                .attr('d', arc)
+                .attr('fill', d => d.data.color)
+                .attr('stroke', 'rgba(255,255,255,0.2)')
+                .attr('stroke-width', 2);
+            
+            // Add percentage label in the bottom part of the chart
+            svg.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', `${radius * 0.6}px`)  // Position in bottom part
+                .style('fill', 'white')
+                .style('font-size', '24px')
+                .style('font-weight', 'bold')
+                .text(`${data.performance_pct}%`);
+            
+            svg.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', `${radius * 0.8}px`)  // Position below percentage
+                .style('fill', 'rgba(255,255,255,0.7)')
+                .style('font-size', '12px')
+                .text('Achieved');
+            
+            // Add tooltips
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.8)")
+                .style("color", "white")
+                .style("padding", "8px")
+                .style("border-radius", "4px")
+                .style("font-size", "12px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000");
+            
+            // Add interactive behavior
+            svg.selectAll('.slice')
+                .on('mouseover', function(event, d) {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .attr('transform', function() {
+                            const centroid = arc.centroid(d);
+                            return `translate(${centroid[0] * 0.1}, ${centroid[1] * 0.1})`;
+                        });
+                    
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`<strong>${d.data.label}</strong><br/>${d.data.value}%`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on('mouseout', function(d) {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .attr('transform', 'translate(0,0)');
+                    
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+        }
+    </script>
+
+    <!-- Overall Renewal Probability Line Chart -->
+    <script>
+        // Load Overall Renewal Probability data and render line chart
+        async function loadOverallRenewalProbabilityChart() {
+            try {
+                console.log('Loading Overall Renewal Probability chart data...');
+                const response = await fetch('/api/sme/overall-renewal-probability');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received data:', data);
+                
+                if (!data || data.length === 0) {
+                    document.getElementById('renewal-probability-chart').innerHTML = 
+                        '<div class="flex items-center justify-center h-full text-white/50">No data available</div>';
+                    return;
+                }
+                
+                renderOverallRenewalProbabilityChart(data);
+            } catch (error) {
+                console.error('Error loading Overall Renewal Probability data:', error);
+                document.getElementById('renewal-probability-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50">Error loading data: ${error.message}</div>`;
+            }
+        }
+        
+        function renderOverallRenewalProbabilityChart(data) {
+            // Clear any existing chart
+            d3.select("#renewal-probability-chart").selectAll("*").remove();
+            
+            // Set dimensions and margins - similar to GWP chart
+            const margin = {top: 30, right: 80, bottom: 60, left: 60};
+            const width = document.getElementById('renewal-probability-chart').offsetWidth - margin.left - margin.right;
+            const height = 192 - margin.top - margin.bottom; // h-48 = 192px
+            
+            // Create SVG
+            const svg = d3.select("#renewal-probability-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            // Month mapping for parsing dates like "Jul 2024"
+            const monthMap = {
+                'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+            };
+            
+            // Process data and create proper dates
+            data.forEach(d => {
+                // Parse "Jul 2024" format
+                const parts = d.month.split(' ');
+                if (parts.length >= 2) {
+                    const monthName = parts[0];
+                    const year = parseInt(parts[1]);
+                    const monthNum = monthMap[monthName];
+                    
+                    if (monthNum !== undefined && !isNaN(year)) {
+                        d.monthDate = new Date(year, monthNum, 1);
+                        d.probability_pct = +d.probability_pct;
+                        d.sortKey = year * 12 + monthNum; // For sorting
+                    }
+                } else {
+                    console.warn(`Cannot parse month: ${d.month}`);
+                }
+            });
+            
+            // Filter out invalid dates and sort chronologically
+            data = data.filter(d => d.monthDate).sort((a, b) => a.sortKey - b.sortKey);
+            
+            console.log('Processed renewal probability data for chart:', data);
+            
+            if (data.length === 0) {
+                svg.append("text")
+                    .attr("x", width / 2)
+                    .attr("y", height / 2)
+                    .attr("text-anchor", "middle")
+                    .style("fill", "rgba(255,255,255,0.5)")
+                    .text("No valid data to display");
+                return;
+            }
+            
+            // Set scales
+            const xScale = d3.scaleTime()
+                .domain(d3.extent(data, d => d.monthDate))
+                .range([0, width]);
+            
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.probability_pct)])
+                .nice()
+                .range([height, 0]);
+            
+            // Create line generator
+            const line = d3.line()
+                .x(d => xScale(d.monthDate))
+                .y(d => yScale(d.probability_pct))
+                .curve(d3.curveMonotoneX);
+            
+            // Add X axis with month labels - show every other month
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale)
+                    .tickFormat(d3.timeFormat("%b %y"))
+                    .ticks(d3.timeMonth.every(2)))  // Show every 2 months
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.8)")
+                .style("font-size", "10px")
+                .attr("transform", "rotate(-35)")
+                .style("text-anchor", "end")
+                .attr("dx", "-0.5em")
+                .attr("dy", "0.15em");
+            
+            // Add Y axis
+            svg.append("g")
+                .call(d3.axisLeft(yScale)
+                    .ticks(5)
+                    .tickFormat(d => d + "%"))  // Add % symbol to Y-axis labels
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.7)")
+                .style("font-size", "11px");
+            
+            // Style axis lines and make them more visible
+            svg.selectAll(".domain")
+                .style("stroke", "rgba(255,255,255,0.4)");
+            
+            svg.selectAll(".tick line")
+                .style("stroke", "rgba(255,255,255,0.2)");
+            
+            // Add the main line - use green color theme for renewal probability
+            svg.append("path")
+                .datum(data)
+                .attr("fill", "none")
+                .attr("stroke", "#10b981")  // emerald-500
+                .attr("stroke-width", 3)
+                .attr("d", line);
+            
+            // Add data points
+            svg.selectAll(".dot")
+                .data(data)
+                .enter().append("circle")
+                .attr("class", "dot")
+                .attr("cx", d => xScale(d.monthDate))
+                .attr("cy", d => yScale(d.probability_pct))
+                .attr("r", 4)
+                .attr("fill", "#10b981")  // emerald-500
+                .attr("stroke", "white")
+                .attr("stroke-width", 1);
+            
+            // Add tooltips
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.8)")
+                .style("color", "white")
+                .style("padding", "8px")
+                .style("border-radius", "4px")
+                .style("font-size", "12px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000");
+            
+            // Add interactive overlay
+            svg.selectAll(".overlay")
+                .data(data)
+                .enter().append("circle")
+                .attr("class", "overlay")
+                .attr("cx", d => xScale(d.monthDate))
+                .attr("cy", d => yScale(d.probability_pct))
+                .attr("r", 8)
+                .attr("fill", "transparent")
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .style("opacity", .9);
+                    tooltip.html(`<strong>${d.month}</strong><br/>Renewal Probability: ${d3.format(".1f")(d.probability_pct)}%`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .style("opacity", 0);
+                });
+        }
+    </script>
+
+    <!-- Competitor Overview Chart -->
+    <script>
+        // Load Competitor Overview data and render multi-line bar chart
+        async function loadCompetitorOverviewChart() {
+            try {
+                console.log('Loading Competitor Overview chart data...');
+                const response = await fetch('/api/sme/competitor-overview');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received data:', data);
+                
+                if (!data || data.length === 0) {
+                    document.getElementById('competitor-overview-chart').innerHTML = 
+                        '<div class="flex items-center justify-center h-full text-white/50">No data available</div>';
+                    return;
+                }
+                
+                renderCompetitorOverviewChart(data);
+            } catch (error) {
+                console.error('Error loading Competitor Overview data:', error);
+                document.getElementById('competitor-overview-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50">Error loading data: ${error.message}</div>`;
+            }
+        }
+        
+        function renderCompetitorOverviewChart(data) {
+            // Clear any existing chart
+            d3.select("#competitor-overview-chart").selectAll("*").remove();
+            
+            // Set dimensions and margins
+            const margin = {top: 20, right: 30, bottom: 60, left: 50};
+            const width = document.getElementById('competitor-overview-chart').offsetWidth - margin.left - margin.right;
+            const height = 160 - margin.top - margin.bottom; // h-40 = 160px
+            
+            // Create SVG
+            const svg = d3.select("#competitor-overview-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            if (!data || data.length === 0) {
+                svg.append("text")
+                    .attr("x", width / 2)
+                    .attr("y", height / 2)
+                    .attr("text-anchor", "middle")
+                    .style("fill", "rgba(255,255,255,0.5)")
+                    .style("font-size", "12px")
+                    .text("No competitor data available");
+                return;
+            }
+            
+            // Define colors for competitors
+            const colors = {
+                'Bupa': '#3b82f6',      // blue-500
+                // 'Tawuniya': '#10b981',  // emerald-500
+                'MedGulf': '#f59e0b',   // amber-500
+                'Allianz': '#8b5cf6',   // violet-500
+                'Other': '#f97316'      // orange-500
+            };
+            
+            // Default color for competitors not in the color map
+            const defaultColor = '#6b7280'; // gray-500
+            
+            // Set up scales
+            const xScale = d3.scaleBand()
+                .domain(data.map(d => d.competitor))
+                .range([0, width])
+                .padding(0.3);
+            
+            const yScale = d3.scaleLinear()
+                .domain([0, Math.max(d3.max(data, d => d.avg_win_rate) * 1.1, 100)])
+                .range([height, 0]);
+            
+            // Add X axis
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.8)")
+                .style("font-size", "10px")
+                .attr("transform", "rotate(-35)")
+                .style("text-anchor", "end")
+                .attr("dx", "-0.5em")
+                .attr("dy", "0.15em");
+            
+            // Add Y axis
+            svg.append("g")
+                .call(d3.axisLeft(yScale)
+                    .ticks(5)
+                    .tickFormat(d => d + "%"))
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.7)")
+                .style("font-size", "10px");
+            
+            // Style axis lines
+            svg.selectAll(".domain")
+                .style("stroke", "rgba(255,255,255,0.3)");
+            
+            svg.selectAll(".tick line")
+                .style("stroke", "rgba(255,255,255,0.1)");
+            
+            // Create tooltip
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "competitor-tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.9)")
+                .style("color", "white")
+                .style("padding", "8px 12px")
+                .style("border-radius", "4px")
+                .style("font-size", "12px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000")
+                .style("box-shadow", "0 2px 10px rgba(0,0,0,0.3)");
+            
+            // Create bars
+            svg.selectAll(".bar")
+                .data(data)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", d => xScale(d.competitor))
+                .attr("width", xScale.bandwidth())
+                .attr("y", d => yScale(d.avg_win_rate))
+                .attr("height", d => height - yScale(d.avg_win_rate))
+                .attr("fill", d => colors[d.competitor] || defaultColor)
+                .attr("opacity", 0.8)
+                .on("mouseover", function(event, d) {
+                    // Highlight bar
+                    d3.select(this)
+                        .attr("opacity", 1)
+                        .attr("stroke", "white")
+                        .attr("stroke-width", 2);
+                    
+                    // Show tooltip
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", 1);
+                    tooltip.html(`
+                        <div><strong>${d.competitor}</strong></div>
+                        <div>Average Win Rate: <strong>${d.avg_win_rate.toFixed(1)}%</strong></div>
+                    `)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 35) + "px");
+                })
+                .on("mouseout", function(event, d) {
+                    // Reset bar
+                    d3.select(this)
+                        .attr("opacity", 0.8)
+                        .attr("stroke", "none");
+                    
+                    // Hide tooltip
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", 0);
+                });
+            
+            // Add value labels on bars
+            svg.selectAll(".value-label")
+                .data(data)
+                .enter().append("text")
+                .attr("class", "value-label")
+                .attr("x", d => xScale(d.competitor) + xScale.bandwidth() / 2)
+                .attr("y", d => yScale(d.avg_win_rate) - 5)
+                .attr("text-anchor", "middle")
+                .style("fill", "rgba(255,255,255,0.9)")
+                .style("font-size", "10px")
+                .style("font-weight", "bold")
+                .text(d => d.avg_win_rate.toFixed(1) + "%");
+        }
+    </script>
+</body>
+</html>
