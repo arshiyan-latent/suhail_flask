@@ -157,48 +157,65 @@
                 <!-- Overall Renewal Probability -->
                 <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
                     <h3 class="text-lg font-medium mb-4 text-center">Overall Renewal Probability</h3>
-                    <div class="h-48 bg-white/10 rounded-lg flex items-center justify-center border border-white/20">
-                        <div class="text-center">
-                            <div class="text-white/60 text-sm mb-2">Coming Soon</div>
-                            <div class="text-white/40 text-xs">Weighted renewal probability analysis</div>
-                        </div>
-                    </div>
+                    <div id="renewal-probability-chart" class="h-48 rounded-lg border border-white/10"></div>
                 </div>
 
                 <!-- New Business Unit Performance -->
-                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md lg:col-span-2 xl:col-span-1">
-                    <h3 class="text-lg font-medium mb-4 text-center">New Business Unit Performance</h3>
-                    <div class="text-center mb-2">
-                        <span class="text-white/50 text-sm">vs. Target</span>
-                    </div>
-                    <div class="h-40 bg-white/10 rounded-lg flex items-center justify-center border border-white/20">
-                        <div class="text-center">
-                            <div class="text-white/60 text-sm mb-2">Coming Soon</div>
-                            <div class="text-white/40 text-xs">Monthly performance analysis</div>
+                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                    <h3 class="text-lg font-medium mb-4 text-center">New Business Unit Performance vs. Target</h3>
+                    <div id="new-business-performance-chart" class="h-40"></div>
+                    <div class="flex justify-center mt-2 space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-violet-500 rounded"></div>
+                            <span class="text-xs text-white/70">Achieved</span>
                         </div>
-                    </div>
-                    <div class="text-center mt-2">
-                        <span class="text-white/40 text-xs">Jan - Dec Monthly Breakdown</span>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-gray-500 rounded"></div>
+                            <span class="text-xs text-white/70">Gap To Target</span>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Renewals Unit Performance -->
-                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md lg:col-span-2 xl:col-span-2">
+                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
                     <h3 class="text-lg font-medium mb-4 text-center">Renewals Unit Performance vs Target</h3>
-                    <div class="h-48 bg-white/10 rounded-lg flex items-center justify-center border border-white/20">
-                        <div class="text-center">
-                            <div class="text-white/60 text-sm mb-2">Coming Soon</div>
-                            <div class="text-white/40 text-xs">Actual vs target performance analysis</div>
+                    <div id="renewals-performance-chart" class="h-36"></div>
+                    <div class="flex justify-center mt-2 space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-emerald-500 rounded"></div>
+                            <span class="text-xs text-white/70">Actual</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-gray-500 rounded"></div>
+                            <span class="text-xs text-white/70">Gap To Target</span>
                         </div>
                     </div>
-                    <div class="flex justify-center mt-4 space-x-4">
-                        <div class="flex items-center space-x-2">
-                            <div class="w-3 h-3 bg-amber-500/70 rounded"></div>
-                            <span class="text-xs text-white/50">Actual</span>
+                </div>
+
+                <!-- Competitor Overview -->
+                <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
+                    <h3 class="text-lg font-medium mb-4 text-center">Competitor Win Rate Overview</h3>
+                    <div id="competitor-overview-chart" class="h-40"></div>
+                    <div class="flex justify-center mt-2 space-x-2 text-xs">
+                        <div class="flex items-center space-x-1">
+                            <div class="w-2 h-2 bg-blue-500 rounded"></div>
+                            <span class="text-white/70">Bupa</span>
                         </div>
-                        <div class="flex items-center space-x-2">
-                            <div class="w-3 h-3 bg-amber-300/50 rounded"></div>
-                            <span class="text-xs text-white/50">Target</span>
+                        <!-- <div class="flex items-center space-x-1">
+                            <div class="w-2 h-2 bg-green-500 rounded"></div>
+                            <span class="text-white/70">Tawuniya</span>
+                        </div> -->
+                        <div class="flex items-center space-x-1">
+                            <div class="w-2 h-2 bg-yellow-500 rounded"></div>
+                            <span class="text-white/70">MedGulf</span>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <div class="w-2 h-2 bg-purple-500 rounded"></div>
+                            <span class="text-white/70">Allianz</span>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <div class="w-2 h-2 bg-orange-500 rounded"></div>
+                            <span class="text-white/70">Other</span>
                         </div>
                     </div>
                 </div>
@@ -252,10 +269,37 @@
             <div class="bg-white/5 rounded-xl p-6 backdrop-blur-md">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {% for manager in managers %}
-                    <div class="bg-white/10 rounded-lg p-4">
-                        <h3 class="font-medium text-lg mb-2">{{ manager.username }}</h3>
-                        <p class="text-white/70 text-sm">Manager ID: {{ manager.id }}</p>
-                        <p class="text-white/60 text-xs mt-2">Click to view detailed analytics</p>
+                    <div class="bg-white/10 rounded-lg p-4 hover:bg-white/15 transition-all">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-medium text-lg">{{ manager.username }}</h3>
+                            <span class="text-xs px-2 py-1 bg-blue-500/20 text-blue-200 rounded-full">{{ manager.role|title }}</span>
+                        </div>
+                        
+                        {% if manager.manager_name %}
+                        <p class="text-white/60 text-sm mb-2">
+                            <span class="text-white/40">Reports to:</span> {{ manager.manager_name }}
+                        </p>
+                        {% endif %}
+                        
+                        <div class="flex items-center justify-between text-sm mb-3">
+                            <span class="text-white/70">Managed Agents:</span>
+                            <span class="font-medium text-emerald-400">{{ manager.managed_agents_count }}</span>
+                        </div>
+                        
+                        {% if manager.managed_agents %}
+                        <div class="mb-3">
+                            <p class="text-xs text-white/50 mb-1">Team Members:</p>
+                            <div class="flex flex-wrap gap-1">
+                                {% for agent in manager.managed_agents %}
+                                <span class="text-xs px-2 py-1 bg-gray-600/30 text-gray-200 rounded">{{ agent.username }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <button class="w-full mt-2 px-3 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 rounded-lg text-sm transition-all">
+                            View Analytics
+                        </button>
                     </div>
                     {% endfor %}
                     {% if not managers %}
@@ -1040,6 +1084,10 @@
             loadFunnelCoverageChart();
             loadRenewalHeatmap();
             loadBudgetFitChart();
+            loadRenewalsPerformanceChart();
+            loadNewBusinessPerformanceChart();
+            loadOverallRenewalProbabilityChart();
+            loadCompetitorOverviewChart();
             renderWinRatioChart();
         });
     </script>
@@ -1898,6 +1946,633 @@
                         .duration(500)
                         .style("opacity", 0);
                 });
+        }
+    </script>
+
+    <!-- Renewals Performance Pie Chart -->
+    <script>
+        // Load Renewals Performance data and render pie chart
+        async function loadRenewalsPerformanceChart() {
+            try {
+                console.log('Loading Renewals Performance data...');
+                const response = await fetch('/api/sme/renewals-performance');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received renewals performance data:', data);
+                
+                renderRenewalsPerformanceChart(data);
+            } catch (error) {
+                console.error('Error loading renewals performance data:', error);
+                document.getElementById('renewals-performance-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50 text-sm">Error loading data</div>`;
+            }
+        }
+
+        function renderRenewalsPerformanceChart(data) {
+            // Clear any existing chart
+            d3.select("#renewals-performance-chart").selectAll("*").remove();
+            
+            // Set dimensions - adjusted for smaller height
+            const width = document.getElementById('renewals-performance-chart').offsetWidth;
+            const height = 160; // h-40 = 160px (reduced from h-48)
+            const radius = Math.min(width, height) / 2 - 20;
+            
+            // Create SVG centered in the container
+            const svg = d3.select("#renewals-performance-chart")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .append("g")
+                .attr("transform", `translate(${width/2}, ${height/2})`);
+            
+            console.log('Rendering renewals performance pie chart with data:', data);
+            
+            // Create pie generator
+            const pie = d3.pie()
+                .value(d => d.value)
+                .sort(null);
+            
+            // Create arc generator
+            const arc = d3.arc()
+                .innerRadius(0)
+                .outerRadius(radius);
+            
+            // Create pie data
+            const pieData = pie(data.data);
+            
+            // Create pie slices
+            svg.selectAll('.slice')
+                .data(pieData)
+                .enter()
+                .append('path')
+                .attr('class', 'slice')
+                .attr('d', arc)
+                .attr('fill', d => d.data.color)
+                .attr('stroke', 'rgba(255,255,255,0.2)')
+                .attr('stroke-width', 2);
+            
+            // Add percentage label in the bottom part of the chart
+            svg.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', `${radius * 0.6}px`)  // Position in bottom part
+                .style('fill', 'white')
+                .style('font-size', '24px')
+                .style('font-weight', 'bold')
+                .text(`${data.performance_pct}%`);
+            
+            svg.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', `${radius * 0.8}px`)  // Position below percentage
+                .style('fill', 'rgba(255,255,255,0.7)')
+                .style('font-size', '12px')
+                .text('Achieved');
+            
+            // Add tooltips
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "renewals-tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.8)")
+                .style("color", "white")
+                .style("padding", "8px")
+                .style("border-radius", "4px")
+                .style("font-size", "12px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000");
+            
+            // Add interactive behavior
+            svg.selectAll('.slice')
+                .on('mouseover', function(event, d) {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .attr('transform', function() {
+                            const centroid = arc.centroid(d);
+                            return `translate(${centroid[0] * 0.1}, ${centroid[1] * 0.1})`;
+                        });
+                    
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`<strong>${d.data.label}</strong><br/>${d.data.value}%`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on('mouseout', function(d) {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .attr('transform', 'translate(0,0)');
+                    
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+        }
+    </script>
+
+    <!-- New Business Performance Pie Chart -->
+    <script>
+        // Load New Business Performance data and render pie chart
+        async function loadNewBusinessPerformanceChart() {
+            try {
+                console.log('Loading New Business Performance chart data...');
+                const response = await fetch('/api/sme/new-business-performance');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received data:', data);
+                
+                if (!data || !data.data) {
+                    document.getElementById('new-business-performance-chart').innerHTML = 
+                        '<div class="flex items-center justify-center h-full text-white/50">No data available</div>';
+                    return;
+                }
+                
+                renderNewBusinessPerformanceChart(data);
+            } catch (error) {
+                console.error('Error loading New Business Performance data:', error);
+                document.getElementById('new-business-performance-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50">Error loading data: ${error.message}</div>`;
+            }
+        }
+        
+        function renderNewBusinessPerformanceChart(data) {
+            // Clear any existing chart
+            d3.select("#new-business-performance-chart").selectAll("*").remove();
+            
+            // Set dimensions
+            const width = document.getElementById('new-business-performance-chart').offsetWidth;
+            const height = 160; // h-40 = 160px
+            const radius = Math.min(width, height) / 2 - 10;
+            
+            // Create SVG
+            const svg = d3.select("#new-business-performance-chart")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .append("g")
+                .attr("transform", `translate(${width/2}, ${height/2})`);
+            
+            console.log('Rendering new business performance pie chart with data:', data);
+            
+            // Create pie generator
+            const pie = d3.pie()
+                .value(d => d.value)
+                .sort(null);
+            
+            // Create arc generator
+            const arc = d3.arc()
+                .innerRadius(0)
+                .outerRadius(radius);
+            
+            // Create pie slices
+            const slices = svg.selectAll('.slice')
+                .data(pie(data.data))
+                .enter()
+                .append('g')
+                .attr('class', 'slice');
+            
+            // Add pie slices
+            slices.append('path')
+                .attr('d', arc)
+                .attr('fill', d => d.data.color)
+                .attr('stroke', 'rgba(255,255,255,0.2)')
+                .attr('stroke-width', 2);
+            
+            // Add percentage label in the bottom part of the chart
+            svg.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', `${radius * 0.6}px`)  // Position in bottom part
+                .style('fill', 'white')
+                .style('font-size', '24px')
+                .style('font-weight', 'bold')
+                .text(`${data.performance_pct}%`);
+            
+            svg.append('text')
+                .attr('text-anchor', 'middle')
+                .attr('dy', `${radius * 0.8}px`)  // Position below percentage
+                .style('fill', 'rgba(255,255,255,0.7)')
+                .style('font-size', '12px')
+                .text('Achieved');
+            
+            // Add tooltips
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.8)")
+                .style("color", "white")
+                .style("padding", "8px")
+                .style("border-radius", "4px")
+                .style("font-size", "12px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000");
+            
+            // Add interactive behavior
+            svg.selectAll('.slice')
+                .on('mouseover', function(event, d) {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .attr('transform', function() {
+                            const centroid = arc.centroid(d);
+                            return `translate(${centroid[0] * 0.1}, ${centroid[1] * 0.1})`;
+                        });
+                    
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .9);
+                    tooltip.html(`<strong>${d.data.label}</strong><br/>${d.data.value}%`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on('mouseout', function(d) {
+                    d3.select(this)
+                        .transition()
+                        .duration(200)
+                        .attr('transform', 'translate(0,0)');
+                    
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+        }
+    </script>
+
+    <!-- Overall Renewal Probability Line Chart -->
+    <script>
+        // Load Overall Renewal Probability data and render line chart
+        async function loadOverallRenewalProbabilityChart() {
+            try {
+                console.log('Loading Overall Renewal Probability chart data...');
+                const response = await fetch('/api/sme/overall-renewal-probability');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received data:', data);
+                
+                if (!data || data.length === 0) {
+                    document.getElementById('renewal-probability-chart').innerHTML = 
+                        '<div class="flex items-center justify-center h-full text-white/50">No data available</div>';
+                    return;
+                }
+                
+                renderOverallRenewalProbabilityChart(data);
+            } catch (error) {
+                console.error('Error loading Overall Renewal Probability data:', error);
+                document.getElementById('renewal-probability-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50">Error loading data: ${error.message}</div>`;
+            }
+        }
+        
+        function renderOverallRenewalProbabilityChart(data) {
+            // Clear any existing chart
+            d3.select("#renewal-probability-chart").selectAll("*").remove();
+            
+            // Set dimensions and margins - similar to GWP chart
+            const margin = {top: 30, right: 80, bottom: 60, left: 60};
+            const width = document.getElementById('renewal-probability-chart').offsetWidth - margin.left - margin.right;
+            const height = 192 - margin.top - margin.bottom; // h-48 = 192px
+            
+            // Create SVG
+            const svg = d3.select("#renewal-probability-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            // Month mapping for parsing dates like "Jul 2024"
+            const monthMap = {
+                'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+            };
+            
+            // Process data and create proper dates
+            data.forEach(d => {
+                // Parse "Jul 2024" format
+                const parts = d.month.split(' ');
+                if (parts.length >= 2) {
+                    const monthName = parts[0];
+                    const year = parseInt(parts[1]);
+                    const monthNum = monthMap[monthName];
+                    
+                    if (monthNum !== undefined && !isNaN(year)) {
+                        d.monthDate = new Date(year, monthNum, 1);
+                        d.probability_pct = +d.probability_pct;
+                        d.sortKey = year * 12 + monthNum; // For sorting
+                    }
+                } else {
+                    console.warn(`Cannot parse month: ${d.month}`);
+                }
+            });
+            
+            // Filter out invalid dates and sort chronologically
+            data = data.filter(d => d.monthDate).sort((a, b) => a.sortKey - b.sortKey);
+            
+            console.log('Processed renewal probability data for chart:', data);
+            
+            if (data.length === 0) {
+                svg.append("text")
+                    .attr("x", width / 2)
+                    .attr("y", height / 2)
+                    .attr("text-anchor", "middle")
+                    .style("fill", "rgba(255,255,255,0.5)")
+                    .text("No valid data to display");
+                return;
+            }
+            
+            // Set scales
+            const xScale = d3.scaleTime()
+                .domain(d3.extent(data, d => d.monthDate))
+                .range([0, width]);
+            
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.probability_pct)])
+                .nice()
+                .range([height, 0]);
+            
+            // Create line generator
+            const line = d3.line()
+                .x(d => xScale(d.monthDate))
+                .y(d => yScale(d.probability_pct))
+                .curve(d3.curveMonotoneX);
+            
+            // Add X axis with month labels - show every other month
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale)
+                    .tickFormat(d3.timeFormat("%b %y"))
+                    .ticks(d3.timeMonth.every(2)))  // Show every 2 months
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.8)")
+                .style("font-size", "10px")
+                .attr("transform", "rotate(-35)")
+                .style("text-anchor", "end")
+                .attr("dx", "-0.5em")
+                .attr("dy", "0.15em");
+            
+            // Add Y axis
+            svg.append("g")
+                .call(d3.axisLeft(yScale)
+                    .ticks(5)
+                    .tickFormat(d => d + "%"))  // Add % symbol to Y-axis labels
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.7)")
+                .style("font-size", "11px");
+            
+            // Style axis lines and make them more visible
+            svg.selectAll(".domain")
+                .style("stroke", "rgba(255,255,255,0.4)");
+            
+            svg.selectAll(".tick line")
+                .style("stroke", "rgba(255,255,255,0.2)");
+            
+            // Add the main line - use green color theme for renewal probability
+            svg.append("path")
+                .datum(data)
+                .attr("fill", "none")
+                .attr("stroke", "#10b981")  // emerald-500
+                .attr("stroke-width", 3)
+                .attr("d", line);
+            
+            // Add data points
+            svg.selectAll(".dot")
+                .data(data)
+                .enter().append("circle")
+                .attr("class", "dot")
+                .attr("cx", d => xScale(d.monthDate))
+                .attr("cy", d => yScale(d.probability_pct))
+                .attr("r", 4)
+                .attr("fill", "#10b981")  // emerald-500
+                .attr("stroke", "white")
+                .attr("stroke-width", 1);
+            
+            // Add tooltips
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.8)")
+                .style("color", "white")
+                .style("padding", "8px")
+                .style("border-radius", "4px")
+                .style("font-size", "12px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000");
+            
+            // Add interactive overlay
+            svg.selectAll(".overlay")
+                .data(data)
+                .enter().append("circle")
+                .attr("class", "overlay")
+                .attr("cx", d => xScale(d.monthDate))
+                .attr("cy", d => yScale(d.probability_pct))
+                .attr("r", 8)
+                .attr("fill", "transparent")
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .style("opacity", .9);
+                    tooltip.html(`<strong>${d.month}</strong><br/>Renewal Probability: ${d3.format(".1f")(d.probability_pct)}%`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .style("opacity", 0);
+                });
+        }
+    </script>
+
+    <!-- Competitor Overview Chart -->
+    <script>
+        // Load Competitor Overview data and render multi-line bar chart
+        async function loadCompetitorOverviewChart() {
+            try {
+                console.log('Loading Competitor Overview chart data...');
+                const response = await fetch('/api/sme/competitor-overview');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received data:', data);
+                
+                if (!data || data.length === 0) {
+                    document.getElementById('competitor-overview-chart').innerHTML = 
+                        '<div class="flex items-center justify-center h-full text-white/50">No data available</div>';
+                    return;
+                }
+                
+                renderCompetitorOverviewChart(data);
+            } catch (error) {
+                console.error('Error loading Competitor Overview data:', error);
+                document.getElementById('competitor-overview-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50">Error loading data: ${error.message}</div>`;
+            }
+        }
+        
+        function renderCompetitorOverviewChart(data) {
+            // Clear any existing chart
+            d3.select("#competitor-overview-chart").selectAll("*").remove();
+            
+            // Set dimensions and margins
+            const margin = {top: 20, right: 30, bottom: 60, left: 50};
+            const width = document.getElementById('competitor-overview-chart').offsetWidth - margin.left - margin.right;
+            const height = 160 - margin.top - margin.bottom; // h-40 = 160px
+            
+            // Create SVG
+            const svg = d3.select("#competitor-overview-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            if (!data || data.length === 0) {
+                svg.append("text")
+                    .attr("x", width / 2)
+                    .attr("y", height / 2)
+                    .attr("text-anchor", "middle")
+                    .style("fill", "rgba(255,255,255,0.5)")
+                    .style("font-size", "12px")
+                    .text("No competitor data available");
+                return;
+            }
+            
+            // Define colors for competitors
+            const colors = {
+                'Bupa': '#3b82f6',      // blue-500
+                // 'Tawuniya': '#10b981',  // emerald-500
+                'MedGulf': '#f59e0b',   // amber-500
+                'Allianz': '#8b5cf6',   // violet-500
+                'Other': '#f97316'      // orange-500
+            };
+            
+            // Default color for competitors not in the color map
+            const defaultColor = '#6b7280'; // gray-500
+            
+            // Set up scales
+            const xScale = d3.scaleBand()
+                .domain(data.map(d => d.competitor))
+                .range([0, width])
+                .padding(0.3);
+            
+            const yScale = d3.scaleLinear()
+                .domain([0, Math.max(d3.max(data, d => d.avg_win_rate) * 1.1, 100)])
+                .range([height, 0]);
+            
+            // Add X axis
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.8)")
+                .style("font-size", "10px")
+                .attr("transform", "rotate(-35)")
+                .style("text-anchor", "end")
+                .attr("dx", "-0.5em")
+                .attr("dy", "0.15em");
+            
+            // Add Y axis
+            svg.append("g")
+                .call(d3.axisLeft(yScale)
+                    .ticks(5)
+                    .tickFormat(d => d + "%"))
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.7)")
+                .style("font-size", "10px");
+            
+            // Style axis lines
+            svg.selectAll(".domain")
+                .style("stroke", "rgba(255,255,255,0.3)");
+            
+            svg.selectAll(".tick line")
+                .style("stroke", "rgba(255,255,255,0.1)");
+            
+            // Create tooltip
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "competitor-tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.9)")
+                .style("color", "white")
+                .style("padding", "8px 12px")
+                .style("border-radius", "4px")
+                .style("font-size", "12px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000")
+                .style("box-shadow", "0 2px 10px rgba(0,0,0,0.3)");
+            
+            // Create bars
+            svg.selectAll(".bar")
+                .data(data)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", d => xScale(d.competitor))
+                .attr("width", xScale.bandwidth())
+                .attr("y", d => yScale(d.avg_win_rate))
+                .attr("height", d => height - yScale(d.avg_win_rate))
+                .attr("fill", d => colors[d.competitor] || defaultColor)
+                .attr("opacity", 0.8)
+                .on("mouseover", function(event, d) {
+                    // Highlight bar
+                    d3.select(this)
+                        .attr("opacity", 1)
+                        .attr("stroke", "white")
+                        .attr("stroke-width", 2);
+                    
+                    // Show tooltip
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", 1);
+                    tooltip.html(`
+                        <div><strong>${d.competitor}</strong></div>
+                        <div>Average Win Rate: <strong>${d.avg_win_rate.toFixed(1)}%</strong></div>
+                    `)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 35) + "px");
+                })
+                .on("mouseout", function(event, d) {
+                    // Reset bar
+                    d3.select(this)
+                        .attr("opacity", 0.8)
+                        .attr("stroke", "none");
+                    
+                    // Hide tooltip
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", 0);
+                });
+            
+            // Add value labels on bars
+            svg.selectAll(".value-label")
+                .data(data)
+                .enter().append("text")
+                .attr("class", "value-label")
+                .attr("x", d => xScale(d.competitor) + xScale.bandwidth() / 2)
+                .attr("y", d => yScale(d.avg_win_rate) - 5)
+                .attr("text-anchor", "middle")
+                .style("fill", "rgba(255,255,255,0.9)")
+                .style("font-size", "10px")
+                .style("font-weight", "bold")
+                .text(d => d.avg_win_rate.toFixed(1) + "%");
         }
     </script>
 </body>

@@ -18,13 +18,35 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(1000), nullable=False)
     role = db.Column(db.String(20), nullable=False) 
-    manager_id = db.Column(db.Integer, nullable=True)
+    manager_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+    # Relationships
+    # Self-referential relationship for manager-agent hierarchy
+    manager = db.relationship('User', remote_side=[id], backref='managed_users')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    @property
+    def manager_name(self):
+        """Get the manager's username if exists"""
+        return self.manager.username if self.manager else None
+
+    def get_managed_agents(self):
+        """Get all agents managed by this user (for managers)"""
+        return User.query.filter_by(manager_id=self.id, role='salesagent').all()
+
+    def get_managed_users(self):
+        """Get all users managed by this user (agents and managers)"""
+        return User.query.filter_by(manager_id=self.id).all()
+
+    @staticmethod
+    def get_managers():
+        """Get all users with manager or smeleader role"""
+        return User.query.filter(User.role.in_(['manager', 'smeleader'])).all()
 
 
 class ChatSession(db.Model):

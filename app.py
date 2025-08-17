@@ -27,6 +27,7 @@ from models import db, User, ChatSession, ChatMessage, ClientSummary, TeamNotifi
 from datetime import datetime
 import uuid
 import pandas as pd
+import traceback
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -270,17 +271,25 @@ def home():
     sales_agents = None
     if current_user.role in ['manager', 'smeleader']:
         sales_agents = []
-        for agent in User.query.filter_by(role='salesagent').all():
+        
+        # Managers see only their assigned agents, SME Leaders see all agents
+        if current_user.role == 'manager':
+            agent_query = current_user.get_managed_agents()
+        else:  # smeleader
+            agent_query = User.query.filter_by(role='salesagent').all()
+            
+        for agent in agent_query:
             summaries = ClientSummary.query.filter_by(user_id=agent.id).all()
             sales_agents.append({
                 'id': agent.id,
                 'username': agent.username,
+                'manager_name': agent.manager_name,
                 'summaries': [{'client_name': s.client_name, 'summary': s.summary} for s in summaries]
             })
     
     return render_template('chat.html', username=current_user.username, role=current_user.role,
                          user_id=current_user.id, clients=clients, recent_chats=recent_chats,
-                         sales_agents=sales_agents)
+                         sales_agents=sales_agents, manager_name=current_user.manager_name)
 
 @app.route('/admin')
 @role_required('admin')
@@ -361,8 +370,18 @@ def smeleader_dashboard():
     productivity_data = get_seller_productivity()
     predictions_data = get_predictions_data()
     
-    # Get all managers for SME Leader oversight
-    managers = User.query.filter_by(role='manager').all()
+    # Get all managers for SME Leader oversight with their assigned agents count
+    managers = []
+    for manager in User.query.filter_by(role='manager').all():
+        managed_agents = manager.get_managed_agents()
+        managers.append({
+            'id': manager.id,
+            'username': manager.username,
+            'role': manager.role,
+            'manager_name': manager.manager_name,
+            'managed_agents_count': len(managed_agents),
+            'managed_agents': [{'id': agent.id, 'username': agent.username} for agent in managed_agents]
+        })
     
     return render_template('smeleader_dashboard.html', 
                          agent_stats=agent_stats,
@@ -374,7 +393,12 @@ def smeleader_dashboard():
 @app.route('/manager/team')
 @management_required
 def get_team_members():
-    sales_agents = User.query.filter_by(role='salesagent').all()
+    # Managers see only their assigned agents, SME Leaders see all agents
+    if current_user.role == 'manager':
+        sales_agents = current_user.get_managed_agents()
+    else:  # smeleader
+        sales_agents = User.query.filter_by(role='salesagent').all()
+    
     return render_template('team_members.html', team_members=sales_agents)
 
 @app.route('/manager/agent-summary/<int:agent_id>', methods=['POST'])
@@ -383,6 +407,10 @@ def create_agent_summary_chat(agent_id):
     agent = User.query.get(agent_id)
     if not agent:
         return jsonify({'error': 'Agent not found'}), 404
+    
+    # Check if the current user has permission to access this agent
+    if current_user.role == 'manager' and agent.manager_id != current_user.id:
+        return jsonify({'error': 'Access denied: You can only view your assigned agents'}), 403
     
     # Get all client summaries for this agent
     summaries = ClientSummary.query.filter_by(user_id=agent_id).all()
@@ -448,19 +476,43 @@ def register():
         username = request.form['username']
         password = request.form['password']
         role = request.form['role']
+        manager_id = request.form.get('manager_id')
 
         if User.query.filter_by(username=username).first():
             flash('Username already exists.')
-            return redirect(url_for('register'))
+            managers = User.get_managers()  # Get managers for re-display
+            return render_template('register.html', managers=managers)
 
-        new_user = User(username=username, role=role, manager_id = str(uuid.uuid4()) if role in ['manager', 'smeleader'] else None)
+        # Convert empty string to None for database
+        if manager_id == '':
+            manager_id = None
+        elif manager_id:
+            manager_id = int(manager_id)
+
+        # Validation: agents and managers must have a manager
+        if role in ['salesagent', 'manager'] and not manager_id:
+            flash(f'{role.title()}s must be assigned to a manager.')
+            managers = User.get_managers()
+            return render_template('register.html', managers=managers)
+
+        # Validation: ensure selected manager exists and has appropriate role
+        if manager_id:
+            manager = User.query.get(manager_id)
+            if not manager or manager.role not in ['manager', 'smeleader']:
+                flash('Invalid manager selection.')
+                managers = User.get_managers()
+                return render_template('register.html', managers=managers)
+
+        new_user = User(username=username, role=role, manager_id=manager_id)
         new_user.set_password(password)
         db.session.add(new_user)
         db.session.commit()
         flash('Registration successful! Please login.')
         return redirect(url_for('login'))
 
-    return render_template('register.html')
+    # GET request - show registration form with managers
+    managers = User.get_managers()
+    return render_template('register.html', managers=managers)
 
 @app.route('/logout')
 @login_required
@@ -1019,208 +1071,522 @@ def generate_chat_report():
 
     if not target_bot_message:
         target_bot_message = 'No bot analytical response available.'
+    
     generated_at = datetime.utcnow().isoformat() + 'Z'
     client_name = chat_session.client_name or 'General'
+    
     if output_format.lower() == 'pdf' and A4 is not None:
-        # Enhanced PDF rendering using platypus (tables + headings) with fallback
+        # Professional PDF rendering
+        import io
+        import re
+        from pathlib import Path
+        from reportlab.lib.utils import ImageReader
         buffer = io.BytesIO()
-        # Attempt rich layout; fallback to plain text if imports failed
         try:
+            # Professional black and white styles
             styles = getSampleStyleSheet()
-            # Custom tweaks
-            styles.add(ParagraphStyle(name='Small', parent=styles['BodyText'], fontSize=9, leading=11))
-            heading_map = {
-                1: styles['Heading1'],
-                2: styles['Heading2'],
-                3: styles['Heading3']
-            }
+            
+            # Professional custom styles
+            styles.add(ParagraphStyle(
+                name='SuhailTitle',
+                parent=styles['Heading1'],
+                fontSize=18,
+                textColor=colors.black,
+                spaceAfter=0,
+                fontName='Helvetica-Bold',
+                alignment=0  # Left align
+            ))
+            
+            styles.add(ParagraphStyle(
+                name='Subtitle',
+                parent=styles['Heading2'],
+                fontSize=14,
+                textColor=colors.black,
+                spaceAfter=10,
+                fontName='Helvetica-Bold',
+                alignment=0
+            ))
+            
+            styles.add(ParagraphStyle(
+                name='Body',
+                parent=styles['BodyText'],
+                fontSize=10,
+                textColor=colors.black,
+                spaceAfter=6,
+                fontName='Helvetica',
+                leading=12
+            ))
+            
+            styles.add(ParagraphStyle(
+                name='BulletPoint',
+                parent=styles['BodyText'],
+                fontSize=10,
+                textColor=colors.black,
+                leftIndent=15,
+                spaceAfter=4,
+                fontName='Helvetica',
+                leading=12
+            ))
+            
+            # Add justified body style for better paragraph flow
+            from reportlab.lib.enums import TA_JUSTIFY, TA_LEFT, TA_RIGHT
+            styles.add(ParagraphStyle(
+                name='SuhailBodyJust',
+                parent=styles['BodyText'],
+                fontSize=10,
+                textColor=colors.black,
+                spaceAfter=3,
+                fontName='Helvetica',
+                leading=12,
+                alignment=TA_JUSTIFY
+            ))
+            
+            # Add table cell styles
+            styles.add(ParagraphStyle(
+                name='CellLeft',
+                parent=styles['BodyText'],
+                fontSize=9,
+                textColor=colors.black,
+                spaceAfter=0,
+                fontName='Helvetica',
+                leading=12,
+                alignment=TA_LEFT
+            ))
+            
+            styles.add(ParagraphStyle(
+                name='CellRight',
+                parent=styles['BodyText'],
+                fontSize=9,
+                textColor=colors.black,
+                spaceAfter=0,
+                fontName='Helvetica',
+                leading=12,
+                alignment=TA_RIGHT
+            ))
+            
+            # Resolve logo path reliably
+            def resolve_logo_path():
+                candidates = []
+                try:
+                    # Flask-aware absolute path
+                    from flask import current_app
+                    candidates.append(Path(current_app.root_path) / "static" / "logo_no_bg.png")
+                except Exception:
+                    pass
+
+                # Relative to this file
+                here = Path(__file__).resolve().parent
+                candidates += [
+                    here / "static" / "logo_no_bg.png",
+                    Path.cwd() / "static" / "logo_no_bg.png",
+                    Path("static/logo_no_bg.png"),
+                ]
+                for p in candidates:
+                    if p.exists():
+                        return p
+                return None
+
+            logo_fs_path = resolve_logo_path()
+            
+            # Debug path resolution
+            print("CWD:", os.getcwd(), "LogoPath:", logo_fs_path)
+            
+            # Create logo flowable if path exists
+            logo_flowable = None
+            if logo_fs_path:
+                try:
+                    from PIL import Image as PILImage
+                    img = PILImage.open(logo_fs_path)
+                    # Flatten transparency to white to avoid odd renderers choking
+                    if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+                        bg = PILImage.new("RGB", img.size, (255, 255, 255))
+                        bg.paste(img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None)
+                        img = bg
+                    bio = io.BytesIO()
+                    img.save(bio, format="PNG")
+                    bio.seek(0)
+                    from reportlab.platypus import Image as RLImage
+                    logo_flowable = RLImage(ImageReader(bio), width=50, height=35)
+                    logo_flowable.hAlign = 'RIGHT'
+                    logo_flowable._preserveAspectRatio = True   # keep aspect
+                except Exception as e:
+                    print(f"PIL processing failed: {e}, trying direct ReportLab")
+                    # Fallback: try without Pillow
+                    try:
+                        from reportlab.platypus import Image as RLImage
+                        logo_flowable = RLImage(str(logo_fs_path), width=50, height=35)
+                        logo_flowable.hAlign = 'RIGHT'
+                        logo_flowable._preserveAspectRatio = True
+                    except Exception as e2:
+                        print(f"Direct ReportLab failed too: {e2}")
+                        logo_flowable = None
+            
+            # Debug logo
+            print("Logo exists:", bool(logo_fs_path), "Working dir:", os.getcwd())
+            
+            # Build PDF document with single page preference
+            doc = SimpleDocTemplate(
+                buffer, 
+                pagesize=A4, 
+                leftMargin=20*mm, 
+                rightMargin=20*mm, 
+                topMargin=20*mm, 
+                bottomMargin=20*mm
+            )
+            
             story = []
-            # Title block
-            story.append(Paragraph('Chat Report', styles['Heading1']))
-            meta_html = f"<b>Client:</b> {client_name}<br/><b>Chat ID:</b> {chat_id}<br/><b>Generated (UTC):</b> {generated_at}".replace('\n',' ')
-            story.append(Paragraph(meta_html, styles['Small']))
+            avail_w = doc.width
+            
+            # Header with proper width calculation
+            if logo_flowable:
+                header = Table(
+                    [[Paragraph('<b>Suhail Analytics Report</b>', styles['SuhailTitle']), logo_flowable]],
+                    colWidths=[0.78 * avail_w, 0.22 * avail_w],
+                )
+            else:
+                header = Table(
+                    [[Paragraph('<b>Suhail Analytics Report</b>', styles['SuhailTitle'])]],
+                    colWidths=[avail_w]
+                )
+
+            header.setStyle(TableStyle([
+                ('ALIGN', (0,0), (0,0), 'LEFT'),
+                ('ALIGN', (-1,0), (-1,0), 'RIGHT'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('LINEBELOW', (0,0), (-1,-1), 1, colors.black),
+                ('LEFTPADDING', (0,0), (-1,-1), 0),
+                ('RIGHTPADDING', (0,0), (-1,-1), 0),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+            ]))
+            story.append(header)
+            story.append(Spacer(1, 25))
+            
+            # Client Information - more professional layout with local time
+            try:
+                from zoneinfo import ZoneInfo
+                cairo = ZoneInfo("Africa/Cairo")
+                now_local = datetime.now(cairo)
+                time_display = now_local.strftime('%H:%M %Z') + ' / ' + datetime.utcnow().strftime('%H:%M UTC')
+                date_display = now_local.strftime('%B %d, %Y')
+            except ImportError:
+                # Fallback for older Python versions
+                now_local = datetime.utcnow()
+                time_display = now_local.strftime('%H:%M UTC')
+                date_display = now_local.strftime('%B %d, %Y')
+            
+            client_display = (client_name or 'General').title()
+            meta_data = [
+                ['Client:', client_display],
+                ['Report ID:', chat_id[:12] + '...'],
+                ['Date:', date_display],
+                ['Time:', time_display],
+                ['Analyst:', getattr(current_user, 'username', 'System')]
+            ]
+            
+            meta_table = Table(meta_data, colWidths=[80, avail_w - 80])
+            meta_table.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('LEFTPADDING', (0, 0), (-1, -1), 4),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LINEBELOW', (0, -1), (-1, -1), 0.5, colors.black)
+            ]))
+            story.append(meta_table)
+            story.append(Spacer(1, 15))
+            
+            # Section Header
+            story.append(Paragraph('Executive Summary', styles['Subtitle']))
             story.append(Spacer(1, 8))
-            story.append(Paragraph('Analytical Output', styles['Heading2']))
-            story.append(Spacer(1, 4))
-            # Build lines list from analytical markdown
+            
+            # Process content with improved markdown parsing
             lines = target_bot_message.splitlines()
             i = 0
+            in_code_fence = False
+            
+            def normalize_line(s: str) -> str:
+                """Normalize line and strip zero-width/Unicode oddities"""
+                s = s.replace('\u200b', '').replace('\ufeff', '')  # zero-width space, BOM
+                s = s.replace('â€¢', '•')
+                s = s.replace('■', '✓')
+                s = s.replace('✅', '✓')  # ensure proper checkmark
+                s = s.replace('❌', '✗')  # ensure proper cross
+                s = s.replace('□', '✗')
+                return s
+            
+            def clean_text(text):
+                """Clean text and fix symbols"""
+                # Replace problematic symbols
+                text = text.replace('■', '✓')
+                text = text.replace('□', '✗')
+                text = text.replace('â€¢', '•')
+                # Clean up markdown formatting
+                text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Remove bold markdown
+                text = re.sub(r'\*(.*?)\*', r'\1', text)      # Remove italic markdown
+                # Clean up any other encoding issues
+                text = re.sub(r'[^\x00-\x7F\u2713\u2717\u2022]+', '', text)
+                return text.strip()
+            
+            def is_numberish(s: str) -> bool:
+                """Check if string looks like a number"""
+                s = s.replace(',', '').replace('SAR', '').replace('%', '').strip()
+                return bool(re.match(r'^-?\d+(\.\d+)?$', s))
+            
+            def pcell(txt: str) -> Paragraph:
+                """Convert text to paragraph cell with proper alignment"""
+                return Paragraph(clean_text(txt), styles['CellRight'] if is_numberish(txt) else styles['CellLeft'])
+            
+            def make_table(rows):
+                """Create properly formatted table"""
+                if not rows:
+                    return None
+                
+                # Convert to Paragraphs for better wrapping
+                prows = [[pcell(str(c)) for c in row] for row in rows]
+                n_cols = len(prows[0])
+                col_width = max(60, (avail_w / max(1, n_cols)))   # min 60pt per column
+                
+                tbl = Table(prows, colWidths=[col_width]*n_cols, hAlign='LEFT', repeatRows=1)
+                
+                # Build table style
+                table_style = [
+                    ('BACKGROUND', (0,0), (-1,0), colors.Color(0.88,0.88,0.88)),
+                    ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+                    ('LEFTPADDING', (0,0), (-1,-1), 6),
+                    ('RIGHTPADDING', (0,0), (-1,-1), 6),
+                    ('TOPPADDING', (0,0), (-1,-1), 6),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ]
+                
+                # Add alternating row colors properly
+                for row_idx in range(1, len(prows)):
+                    if row_idx % 2 == 0:
+                        table_style.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.Color(0.95, 0.95, 0.95)))
+                    else:
+                        table_style.append(('BACKGROUND', (0, row_idx), (-1, row_idx), colors.white))
+                
+                tbl.setStyle(TableStyle(table_style))
+                return tbl
+            
+            def add_paragraph(txt, style_name='SuhailBodyJust'):
+                """Add paragraph with controlled spacing"""
+                if txt and len(txt.strip()) > 2:
+                    story.append(Paragraph(txt, styles[style_name]))
+                    story.append(Spacer(1, 3))  # Minimal spacing
+            
             while i < len(lines):
                 raw_line = lines[i]
-                line = raw_line.rstrip('\n')
-                stripped = line.lstrip()
-                # Utility to clean markdown emphases in cells
-                import re as _cell_re
-                def _clean_cell(txt: str):
-                    txt = txt.strip()
-                    # Remove surrounding ** ** or __ __
-                    txt = _cell_re.sub(r'^\*\*(.+?)\*\*$', r'\1', txt)
-                    txt = _cell_re.sub(r'^__(.+?)__$', r'\1', txt)
-                    return txt
-                # Pseudo-table (bold tokens without pipes) detection (allow leading spaces)
-                if stripped.startswith('**') and stripped.count('**') >= 4 and '|' not in stripped:
-                    import re
-                    header_tokens = re.findall(r'\*\*(.+?)\*\*', stripped)
-                    header_tokens = [_clean_cell(h) for h in header_tokens]
-                    if header_tokens:
-                        i += 1
-                        row_data = []
-                        while i < len(lines):
-                            row_line = lines[i].rstrip('\n')
-                            row_stripped = row_line.lstrip()
-                            if not (row_stripped.startswith('**') and row_stripped.count('**') >= 2):
-                                break
-                            cells = re.findall(r'\*\*(.+?)\*\*', row_stripped)
-                            tail = row_stripped.split('**')[-1].strip()
-                            if tail:
-                                tail_parts = tail.split()
-                                cells.extend(tail_parts)
-                            if len(cells) < len(header_tokens):
-                                cells += [''] * (len(header_tokens) - len(cells))
-                            # Clean each cell
-                            cells = [_clean_cell(c) for c in cells]
-                            row_data.append(cells[:len(header_tokens)])
+                s = normalize_line(raw_line.strip())
+                
+                # Handle fenced code blocks
+                if s.startswith("```"):
+                    in_code_fence = not in_code_fence
+                    i += 1
+                    continue
+                if in_code_fence:
+                    i += 1
+                    continue
+                
+                if not s:
+                    story.append(Spacer(1, 4))  # Reduced spacing
+                    i += 1
+                    continue
+                
+                # Check for table (pipe-separated) with improved detection
+                if '|' in s and s.count('|') >= 2:
+                    table_lines = []
+                    # Collect contiguous table lines
+                    while i < len(lines):
+                        t = normalize_line(lines[i].strip())
+                        if '|' in t and t.count('|') >= 2 and not t.startswith("```"):
+                            table_lines.append(t)
                             i += 1
-                        if row_data:
-                            tbl_rows = [header_tokens] + row_data
-                            tbl = Table(tbl_rows, hAlign='LEFT')
-                            tbl_style = TableStyle([
-                                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#222222')),
-                                ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-                                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-                                ('FONTSIZE', (0,0), (-1,0), 9),
-                                ('BACKGROUND', (0,1), (-1,-1), colors.whitesmoke),
-                                ('TEXTCOLOR', (0,1), (-1,-1), colors.black),
-                                ('FONTSIZE', (0,1), (-1,-1), 8),
-                                ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
-                                ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.whitesmoke, colors.HexColor('#eeeeee')])
-                            ])
-                            tbl.setStyle(tbl_style)
-                            story.append(tbl)
-                            story.append(Spacer(1, 10))
-                            continue
-                # Skip trivial
-                if not stripped:
-                    story.append(Spacer(1, 6))
+                        else:
+                            break
+                    
+                    # Process table
+                    if table_lines:
+                        rows = []
+                        for line in table_lines:
+                            cells = [c.strip() for c in line.split('|')[1:-1]]  # Remove empty first/last
+                            # Skip separator lines like |--|---| but keep header separators
+                            if all(c.replace('-', '').replace(' ', '') == '' for c in cells):
+                                continue
+                            if cells:  # Only add non-empty rows
+                                rows.append(cells)
+                        
+                        if rows and len(rows) > 0:
+                            try:
+                                tbl = make_table(rows)
+                                if tbl:
+                                    story.append(tbl)
+                                    story.append(Spacer(1, 8))
+                            except Exception as table_error:
+                                print(f"Table creation error: {table_error}")
+                                # Fallback to regular text
+                                add_paragraph(clean_text(s))
+                    continue
+                
+                # Process headings - remove ### markdown
+                if s.startswith('#'):
+                    level = len(s) - len(s.lstrip('#'))
+                    text = s[level:].strip()
+                    cleaned_text = clean_text(text)
+                    if level <= 2:
+                        story.append(Spacer(1, 6))
+                        story.append(Paragraph('<b><font size="12">' + cleaned_text + '</font></b>', styles['Body']))
+                        story.append(Spacer(1, 4))
+                    else:
+                        story.append(Spacer(1, 4))
+                        story.append(Paragraph('<b>' + cleaned_text + '</b>', styles['Body']))
+                        story.append(Spacer(1, 2))
                     i += 1
                     continue
-                # Headings
-                if stripped.startswith('#'):
-                    hashes = len(stripped) - len(stripped.lstrip('#'))
-                    text = stripped[hashes:].strip()
-                    level = min(hashes,3)
-                    story.append(Paragraph(text, heading_map.get(level, styles['Heading3'])))
+                
+                # Process bullet points
+                if s.startswith(('*', '-', '•')) and len(s.split()) > 1:
+                    bullet_text = s[1:].strip()
+                    cleaned_bullet = clean_text(bullet_text)
+                    story.append(Paragraph('• ' + cleaned_bullet, styles['BulletPoint']))
+                    story.append(Spacer(1, 2))  # Minimal spacing
                     i += 1
                     continue
-                # Table detection (pipe tables)
-                def is_table_line(l):
-                    return '|' in l and l.count('|') >= 2
-                if is_table_line(stripped):
-                    table_block = []
-                    while i < len(lines) and is_table_line(lines[i].strip()):
-                        table_block.append(lines[i].strip())
-                        i += 1
-                    raw_rows = [r.strip('|') for r in table_block]
-                    rows = []
-                    for r in raw_rows:
-                        cells = [c.strip() for c in r.split('|')]
-                        if all(set(c.replace('-',''))==set() for c in cells):
-                            continue
-                        cells = [_clean_cell(c) for c in cells]
-                        rows.append(cells)
-                    if rows:
-                        tbl = Table(rows, hAlign='LEFT')
-                        tbl_style = TableStyle([
-                            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#333333')),
-                            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-                            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-                            ('FONTSIZE', (0,0), (-1,0), 9),
-                            ('BACKGROUND', (0,1), (-1,-1), colors.HexColor('#f5f5f5')),
-                            ('TEXTCOLOR', (0,1), (-1,-1), colors.black),
-                            ('FONTSIZE', (0,1), (-1,-1), 8),
-                            ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
-                            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.whitesmoke, colors.HexColor('#eeeeee')])
-                        ])
-                        tbl.setStyle(tbl_style)
-                        story.append(tbl)
-                        story.append(Spacer(1, 10))
-                    continue
-                # Bullet list
-                if stripped.startswith(('*','-')) and len(stripped.split())>1:
-                    bullets = []
-                    while i < len(lines) and lines[i].lstrip().startswith(('*','-')):
-                        bullets.append(lines[i].lstrip()[1:].strip())
-                        i += 1
-                    bullet_html = '<br/>'.join([f'• {b}' for b in bullets])
-                    story.append(Paragraph(bullet_html, styles['Small']))
-                    story.append(Spacer(1,6))
-                    continue
-                # Paragraph fallback with proper bold conversion
-                import re as _re
-                def boldify(s):
-                    s2 = _re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', s)
-                    s2 = _re.sub(r'^\*\*(.+?)\*\*$', r'<b>\1</b>', s2)
-                    return s2.replace('**','')
-                story.append(Paragraph(boldify(stripped), styles['BodyText']))
-                story.append(Spacer(1,4))
+                
+                # Regular paragraph - clean and format properly with improved flow
+                cleaned_text = clean_text(s)
+                if cleaned_text and len(cleaned_text) > 3:  # Avoid very short fragments
+                    # Combine with next line if it looks like a continuation
+                    combined_lines = [cleaned_text]
+                    
+                    # Look ahead to combine fragmented sentences
+                    look_ahead = 1
+                    while (i + look_ahead < len(lines) and look_ahead <= 3):  # Max 3 lines ahead
+                        next_line = lines[i + look_ahead].strip()
+                        if not next_line or next_line.startswith(('#', '|', '*', '-', '```')):
+                            break
+                        
+                        next_normalized = normalize_line(next_line)
+                        next_cleaned = clean_text(next_normalized)
+                        
+                        if next_cleaned and len(next_cleaned) > 3:
+                            # If current line doesn't end with punctuation and next doesn't start with capital
+                            if (not cleaned_text.endswith(('.', '!', '?', ':')) and 
+                                next_cleaned and not next_cleaned[0].isupper()):
+                                combined_lines.append(next_cleaned)
+                                i += 1  # Skip this line since we combined it
+                                look_ahead += 1
+                            else:
+                                break
+                        else:
+                            break
+                    
+                    final_text = ' '.join(combined_lines)
+                    add_paragraph(final_text)
+                
                 i += 1
-            story.append(Spacer(1,12))
-            story.append(Paragraph('<i>End of Report</i>', styles['Small']))
-            doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=18*mm, rightMargin=18*mm, topMargin=18*mm, bottomMargin=18*mm)
+            
+            # Footer
+            story.append(Spacer(1, 15))  # Reduced spacing
+            footer_data = [[
+                Paragraph('<font size="8">Generated by Suhail Analytics Platform</font>', styles['BodyText'])
+            ]]
+            footer_table = Table(footer_data, colWidths=[avail_w])
+            footer_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),  # Reduced padding
+                ('LINEABOVE', (0, 0), (-1, -1), 0.5, colors.black),
+            ]))
+            story.append(footer_table)
+            
+            # Build PDF
             doc.build(story)
             buffer.seek(0)
+            
             return send_file(
                 buffer,
                 mimetype='application/pdf',
                 as_attachment=True,
-                download_name=f'report_{chat_id}.pdf'
+                download_name=f'suhail_report_{client_name}_{datetime.utcnow().strftime("%Y%m%d")}.pdf'
             )
-        except Exception:
-            # Fallback to previous plain text canvas approach
+            
+        except Exception as e:
+            print(f"PDF generation error: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Fallback to simple PDF using canvas
             buffer = io.BytesIO()
             c = canvas.Canvas(buffer, pagesize=A4)
             width, height = A4
-            margin = 20 * mm
-            text_obj = c.beginText(margin, height - margin)
-            text_obj.setFont('Helvetica-Bold', 14)
-            text_obj.textLine('Chat Report')
-            text_obj.setFont('Helvetica', 10)
-            meta_lines = [
-                f'Client: {client_name}', f'Chat ID: {chat_id}', f'Generated (UTC): {generated_at}', '', 'Analytical Output:', ''
-            ]
-            for line in meta_lines:
-                text_obj.textLine(line)
-            import textwrap
-            wrap_width = 100
-            for raw_line in target_bot_message.splitlines():
-                if not raw_line.strip():
-                    text_obj.textLine('')
-                    continue
-                for wrapped in textwrap.wrap(raw_line, wrap_width):
-                    if text_obj.getY() < 40 * mm:
-                        c.drawText(text_obj)
-                        c.showPage()
-                        text_obj = c.beginText(margin, height - margin)
-                        text_obj.setFont('Helvetica', 10)
-                    text_obj.textLine(wrapped)
-            c.drawText(text_obj)
-            c.showPage()
+            margin = 50
+            
+            # Title
+            c.setFont("Helvetica-Bold", 16)
+            c.drawString(margin, height - 100, "Suhail Analytics Report")
+            
+            # Meta info
+            c.setFont("Helvetica", 10)
+            y = height - 140
+            c.drawString(margin, y, f"Client: {client_name}")
+            c.drawString(margin, y-20, f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+            
+            # Content
+            c.setFont("Helvetica", 9)
+            y = y - 60
+            lines = target_bot_message.split('\n')
+            for line in lines[:50]:  # Limit lines
+                if y < 100:
+                    c.showPage()
+                    y = height - 100
+                    c.setFont("Helvetica", 9)
+                # Clean and encode the line properly
+                clean_line = line.replace('■', 'v').replace('□', 'x').replace('#', '').strip()[:80]
+                try:
+                    if clean_line:  # Only draw non-empty lines
+                        c.drawString(margin, y, clean_line)
+                except:
+                    c.drawString(margin, y, "Content contains special characters")
+                y -= 15
+            
             c.save()
             buffer.seek(0)
+            
             return send_file(
                 buffer,
                 mimetype='application/pdf',
                 as_attachment=True,
-                download_name=f'report_{chat_id}.pdf'
+                download_name=f'suhail_report_{client_name}_{datetime.utcnow().strftime("%Y%m%d")}.pdf'
             )
-    # default markdown
-    report_md = f"""# Chat Report\n\nClient: {client_name}\nChat ID: {chat_id}\nGenerated At (UTC): {generated_at}\n\n## Analytical Output\n\n{target_bot_message}\n\n---\n*End of Report*\n"""
+    
+    # Default markdown format
+    report_md = f"""# Suhail Analytics Report
+
+## Client Information
+- **Client:** {client_name}
+- **Chat ID:** {chat_id}
+- **Generated:** {generated_at}
+- **Analyst:** {current_user.username if hasattr(current_user, 'username') else 'System'}
+
+## Executive Summary
+
+{target_bot_message}
+
+---
+*Generated by Suhail Analytics Platform*
+"""
     md_bytes = report_md.encode('utf-8')
     return send_file(
         io.BytesIO(md_bytes),
         mimetype='text/markdown; charset=utf-8',
         as_attachment=True,
-        download_name=f'report_{chat_id}.md'
+        download_name=f'suhail_report_{client_name}_{datetime.utcnow().strftime("%Y%m%d")}.md'
     )
 
 # SME Leader Dashboard API Routes
@@ -1363,6 +1729,197 @@ def get_budget_fit_analysis():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Failed to load Budget Fit Analysis data: {str(e)}'}), 500
+
+@app.route('/api/sme/renewals-performance', methods=['GET'])
+@role_required('smeleader')
+def get_renewals_performance():
+    """Get Renewals Performance data from Excel file - pie chart data"""
+    try:
+        # Read the targets_monthly sheet from sme.xlsx
+        df = pd.read_excel('sme.xlsx', sheet_name='targets_monthly')
+        
+        # Check if required columns exist
+        if 'Month' not in df.columns or 'Renewals_Performance_Pct' not in df.columns:
+            print(f"Available columns in targets_monthly sheet: {list(df.columns)}")
+            return jsonify({'error': 'Required columns not found'}), 404
+        
+        # Get the first non-null performance percentage (since it's consistent across months)
+        performance_pct = None
+        for index, row in df.iterrows():
+            if pd.notna(row['Renewals_Performance_Pct']):
+                performance_pct = float(row['Renewals_Performance_Pct'])
+                break
+        
+        if performance_pct is None:
+            return jsonify({'error': 'No valid performance data found'}), 404
+        
+        # Create pie chart data - performance vs remaining
+        remaining_pct = 100 - performance_pct
+        
+        result = {
+            'performance_pct': round(performance_pct, 1),
+            'remaining_pct': round(remaining_pct, 1),
+            'data': [
+                {
+                    'label': 'Achieved',
+                    'value': round(performance_pct, 1),
+                    'color': '#10b981'  # emerald-500
+                },
+                {
+                    'label': 'Remaining',
+                    'value': round(remaining_pct, 1),
+                    'color': '#6b7280'  # gray-500
+                }
+            ]
+        }
+        
+        print(f"Returning renewals performance data: {result}")
+        return jsonify(result)
+        
+    except FileNotFoundError as e:
+        print(f"File not found error: {e}")
+        return jsonify({'error': 'SME Excel file not found'}), 404
+    except Exception as e:
+        print(f"Error in get_renewals_performance: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to load Renewals Performance data: {str(e)}'}), 500
+
+@app.route('/api/sme/new-business-performance', methods=['GET'])
+@role_required('smeleader')
+def get_new_business_performance():
+    """Get New Business Performance data from Excel file - pie chart data"""
+    try:
+        # Read the targets_monthly sheet from sme.xlsx
+        df = pd.read_excel('sme.xlsx', sheet_name='targets_monthly')
+        
+        # Check if required columns exist
+        if 'Month' not in df.columns or 'NB_Performance_Pct' not in df.columns:
+            print(f"Available columns in targets_monthly sheet: {list(df.columns)}")
+            return jsonify({'error': 'Required columns not found'}), 404
+        
+        # Get the first non-null performance percentage (since it's consistent across months)
+        performance_pct = None
+        for index, row in df.iterrows():
+            if pd.notna(row['NB_Performance_Pct']):
+                performance_pct = float(row['NB_Performance_Pct'])
+                break
+        
+        if performance_pct is None:
+            return jsonify({'error': 'No valid performance data found'}), 404
+        
+        # Create pie chart data - performance vs remaining
+        remaining_pct = 100 - performance_pct
+        
+        result = {
+            'performance_pct': round(performance_pct, 1),
+            'remaining_pct': round(remaining_pct, 1),
+            'data': [
+                {
+                    'label': 'Achieved',
+                    'value': round(performance_pct, 1),
+                    'color': '#8b5cf6'  # violet-500 (different color from renewals)
+                },
+                {
+                    'label': 'Gap To Target',
+                    'value': round(remaining_pct, 1),
+                    'color': '#6b7280'  # gray-500
+                }
+            ]
+        }
+        
+        print(f"Returning new business performance data: {result}")
+        return jsonify(result)
+        
+    except FileNotFoundError as e:
+        print(f"File not found error: {e}")
+        return jsonify({'error': 'SME Excel file not found'}), 404
+    except Exception as e:
+        print(f"Error in get_new_business_performance: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to load New Business Performance data: {str(e)}'}), 500
+
+@app.route('/api/sme/overall-renewal-probability', methods=['GET'])
+@role_required('smeleader')
+def get_overall_renewal_probability():
+    """Get Overall Renewal Probability data from Excel file - line chart data"""
+    try:
+        # Read the kpi_monthly sheet from sme.xlsx
+        df = pd.read_excel('sme.xlsx', sheet_name='kpi_monthly')
+        
+        # Check if required columns exist
+        if 'Month' not in df.columns or '2.3 Overall Renewal Probability Pct' not in df.columns:
+            print(f"Available columns in kpi_monthly sheet: {list(df.columns)}")
+            return jsonify({'error': 'Required columns not found'}), 404
+        
+        # Process the data
+        data = []
+        for index, row in df.iterrows():
+            if pd.notna(row['Month']) and pd.notna(row['2.3 Overall Renewal Probability Pct']):
+                data.append({
+                    'month': str(row['Month']).strip(),
+                    'probability_pct': float(row['2.3 Overall Renewal Probability Pct'])
+                })
+        
+        print(f"Returning overall renewal probability data: {data}")
+        return jsonify(data)
+        
+    except FileNotFoundError as e:
+        print(f"File not found error: {e}")
+        return jsonify({'error': 'SME Excel file not found'}), 404
+    except Exception as e:
+        print(f"Error in get_overall_renewal_probability: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to load Overall Renewal Probability data: {str(e)}'}), 500
+
+@app.route('/api/sme/competitor-overview', methods=['GET'])
+@role_required('smeleader')
+def get_competitor_overview():
+    """Get Competitor Overview data from Excel file - average win rates by competitor"""
+    try:
+        # Read the competitor_outcomes sheet from sme.xlsx
+        df = pd.read_excel('sme.xlsx', sheet_name='competitor_outcomes')
+        
+        # Check if required columns exist
+        required_columns = ['Month', 'Competitor', 'Win_Rate_Pct']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        if missing_columns:
+            print(f"Missing columns in competitor_outcomes sheet: {missing_columns}")
+            print(f"Available columns: {list(df.columns)}")
+            return jsonify({'error': f'Required columns not found: {missing_columns}'}), 404
+        
+        # Group by Competitor and calculate average win rate
+        competitor_averages = df.groupby('Competitor')['Win_Rate_Pct'].mean().round(1)
+        
+        # Convert to list of dictionaries for the chart
+        data = []
+        for competitor, avg_win_rate in competitor_averages.items():
+            if pd.notna(avg_win_rate):  # Only include non-null values
+                if competitor != 'Tawuniya':
+                    # Exclude Tawuniya as per requirements
+                    data.append({
+                        'competitor': str(competitor).strip(),
+                        'avg_win_rate': float(avg_win_rate)
+                    })
+        
+        # Sort by win rate descending for better visualization
+        data.sort(key=lambda x: x['avg_win_rate'], reverse=True)
+        
+        print(f"Available columns in competitor_outcomes: {list(df.columns)}")
+        print(f"Returning competitor overview averages: {data}")
+        return jsonify(data)
+        
+    except FileNotFoundError as e:
+        print(f"File not found error: {e}")
+        return jsonify({'error': 'SME Excel file not found'}), 404
+    except Exception as e:
+        print(f"Error in get_competitor_overview: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to load Competitor Overview data: {str(e)}'}), 500
 
 @app.route('/api/sme/renewal-heatmap', methods=['GET'])
 @role_required('smeleader')

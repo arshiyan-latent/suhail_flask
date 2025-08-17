@@ -221,7 +221,12 @@
         </svg>
       </button>
       
-      <div class="text-lg font-medium truncate">Suhail</div>
+      <div class="text-lg font-medium truncate">
+        Suhail
+        {% if current_user.role == 'salesagent' and manager_name %}
+          <div class="text-xs text-white/60">Reports to: {{ manager_name }}</div>
+        {% endif %}
+      </div>
       <div class="flex items-center space-x-4">
         {% if current_user.role in ['salesagent', 'smeleader'] %}
         {% include 'components/notification_button.html' %}
@@ -239,7 +244,10 @@
               {% for agent in sales_agents %}
                 <div class="px-4 py-2 text-white hover:bg-white/10 cursor-pointer transition-all"
                      onclick="createAgentSummaryChat('{{ agent.id }}', '{{ agent.username }}')">
-                  {{ agent.username }} - Sales Agent
+                  <div>{{ agent.username }} - Sales Agent</div>
+                  {% if agent.manager_name %}
+                    <div class="text-xs text-white/50">Manager: {{ agent.manager_name }}</div>
+                  {% endif %}
                 </div>
               {% endfor %}
             {% else %}
