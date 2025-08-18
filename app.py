@@ -5,7 +5,7 @@ from agents.summary.summary_agent import extract_transcript, generate_summary
 from agents.manager_agent import create_manager_agent
 from agents.general_agent import supervisor_agent_general
 from dotenv import load_dotenv
-import os, tempfile, time, json, subprocess
+import os, tempfile, time, json, subprocess, uuid, traceback, io, re
 # import logging
 from langchain_openai import ChatOpenAI
 from pathlib import Path
@@ -389,6 +389,55 @@ def smeleader_dashboard():
                          productivity_data=productivity_data,
                          predictions_data=predictions_data,
                          managers=managers)
+
+@app.route('/api/dashboard-views', methods=['GET', 'POST'])
+@role_required('smeleader')
+def get_dashboard_views():
+    """Get available dashboard views from the views folder"""
+    views_path = os.path.join(app.template_folder, 'views')
+    views = []
+    
+    try:
+        if os.path.exists(views_path):
+            for filename in os.listdir(views_path):
+                if filename.endswith('.html'):
+                    # Remove .html extension and replace underscores with spaces
+                    view_name = filename[:-5].replace('_', ' ')
+                    views.append({
+                        'name': view_name,
+                        'file': filename
+                    })
+        
+        # Sort views alphabetically
+        views.sort(key=lambda x: x['name'])
+        return jsonify(views)
+        
+    except Exception as e:
+        print(f"Error loading dashboard views: {e}")
+        return jsonify([])
+
+@app.route('/smeleader/dashboard/views/<view_file>')
+@role_required('smeleader')
+def render_dashboard_view(view_file):
+    """Render a specific dashboard view"""
+    try:
+        # Sanitize filename to prevent directory traversal
+        if '..' in view_file or '/' in view_file or not view_file.endswith('.html'):
+            return "Invalid view file", 404
+        
+        # Check if view file exists
+        views_path = os.path.join(app.template_folder, 'views')
+        full_path = os.path.join(views_path, view_file)
+        
+        if not os.path.exists(full_path):
+            return "View not found", 404
+        
+        # Render the view template from the views subdirectory
+        return render_template(f'views/{view_file}')
+        
+    except Exception as e:
+        print(f"Error rendering view {view_file}: {e}")
+        return "Error loading view", 500
 
 @app.route('/manager/team')
 @management_required
@@ -1693,8 +1742,8 @@ def get_budget_fit_analysis():
         missing_columns = [col for col in required_columns if col not in df.columns]
         
         if missing_columns:
-            print(f"Missing columns in suhail_signals sheet: {missing_columns}")
-            print(f"Available columns: {list(df.columns)}")
+            # print(f"Missing columns in suhail_signals sheet: {missing_columns}")
+            # print(f"Available columns: {list(df.columns)}")
             return jsonify([])
         
         # Calculate averages across all months for each metric
@@ -1718,7 +1767,7 @@ def get_budget_fit_analysis():
             }
         ]
         
-        print(f"Returning budget fit analysis data: {result}")
+        # print(f"Returning budget fit analysis data: {result}")
         return jsonify(result)
         
     except FileNotFoundError as e:
@@ -1740,7 +1789,7 @@ def get_renewals_performance():
         
         # Check if required columns exist
         if 'Month' not in df.columns or 'Renewals_Performance_Pct' not in df.columns:
-            print(f"Available columns in targets_monthly sheet: {list(df.columns)}")
+            # print(f"Available columns in targets_monthly sheet: {list(df.columns)}")
             return jsonify({'error': 'Required columns not found'}), 404
         
         # Get the first non-null performance percentage (since it's consistent across months)
@@ -1773,7 +1822,7 @@ def get_renewals_performance():
             ]
         }
         
-        print(f"Returning renewals performance data: {result}")
+        # print(f"Returning renewals performance data: {result}")
         return jsonify(result)
         
     except FileNotFoundError as e:
@@ -1795,7 +1844,7 @@ def get_new_business_performance():
         
         # Check if required columns exist
         if 'Month' not in df.columns or 'NB_Performance_Pct' not in df.columns:
-            print(f"Available columns in targets_monthly sheet: {list(df.columns)}")
+            # print(f"Available columns in targets_monthly sheet: {list(df.columns)}")
             return jsonify({'error': 'Required columns not found'}), 404
         
         # Get the first non-null performance percentage (since it's consistent across months)
@@ -1828,7 +1877,7 @@ def get_new_business_performance():
             ]
         }
         
-        print(f"Returning new business performance data: {result}")
+        # print(f"Returning new business performance data: {result}")
         return jsonify(result)
         
     except FileNotFoundError as e:
@@ -1850,7 +1899,7 @@ def get_overall_renewal_probability():
         
         # Check if required columns exist
         if 'Month' not in df.columns or '2.3 Overall Renewal Probability Pct' not in df.columns:
-            print(f"Available columns in kpi_monthly sheet: {list(df.columns)}")
+            # print(f"Available columns in kpi_monthly sheet: {list(df.columns)}")
             return jsonify({'error': 'Required columns not found'}), 404
         
         # Process the data
@@ -1862,7 +1911,7 @@ def get_overall_renewal_probability():
                     'probability_pct': float(row['2.3 Overall Renewal Probability Pct'])
                 })
         
-        print(f"Returning overall renewal probability data: {data}")
+        # print(f"Returning overall renewal probability data: {data}")
         return jsonify(data)
         
     except FileNotFoundError as e:
@@ -1887,8 +1936,8 @@ def get_competitor_overview():
         missing_columns = [col for col in required_columns if col not in df.columns]
         
         if missing_columns:
-            print(f"Missing columns in competitor_outcomes sheet: {missing_columns}")
-            print(f"Available columns: {list(df.columns)}")
+            # print(f"Missing columns in competitor_outcomes sheet: {missing_columns}")
+            # print(f"Available columns: {list(df.columns)}")
             return jsonify({'error': f'Required columns not found: {missing_columns}'}), 404
         
         # Group by Competitor and calculate average win rate
@@ -1908,8 +1957,8 @@ def get_competitor_overview():
         # Sort by win rate descending for better visualization
         data.sort(key=lambda x: x['avg_win_rate'], reverse=True)
         
-        print(f"Available columns in competitor_outcomes: {list(df.columns)}")
-        print(f"Returning competitor overview averages: {data}")
+        # print(f"Available columns in competitor_outcomes: {list(df.columns)}")
+        # print(f"Returning competitor overview averages: {data}")
         return jsonify(data)
         
     except FileNotFoundError as e:
@@ -1949,6 +1998,71 @@ def get_renewal_heatmap():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Failed to load heatmap data: {str(e)}'}), 500
+
+@app.route('/api/regional/whale-curve-data', methods=['GET'])
+@role_required('smeleader')
+def get_whale_curve_data():
+    """Get Whale Curve data from client_data.xlsx for Regional Retention Dashboard"""
+    try:
+        # Read the Sheet1 from client_data.xlsx
+        df = pd.read_excel('client_data.xlsx', sheet_name='Sheet1')
+        
+        # Debug: Print available columns
+        print(f"Available columns in client_data.xlsx: {list(df.columns)}")
+        
+        # Check if required columns exist and find the correct column names
+        column_mapping = {}
+        
+        # Look for employee/name column
+        for col in df.columns:
+            col_lower = col.lower().strip()
+            if 'employee' in col_lower or 'name' in col_lower:
+                column_mapping['employee'] = col
+                break
+        
+        # Look for %Ach column
+        for col in df.columns:
+            if '%Ach' in col or 'ach' in col.lower():
+                column_mapping['pct_ach'] = col
+                break
+        
+        # Look for Cum-Booked% column
+        for col in df.columns:
+            if 'cum-booked' in col.lower() or 'booked' in col.lower():
+                column_mapping['cum_booked'] = col
+                break
+        
+        print(f"Column mapping found: {column_mapping}")
+        
+        if not column_mapping.get('employee'):
+            return jsonify({'error': 'Employee/Name column not found. Available columns: ' + str(list(df.columns))}), 404
+        
+        # Extract the data using the found column names
+        data = []
+        for index, row in df.iterrows():
+            if pd.notna(row[column_mapping['employee']]):
+                employee_name = str(row[column_mapping['employee']]).strip()
+                pct_ach = float(row[column_mapping.get('pct_ach', column_mapping['employee'])]) if column_mapping.get('pct_ach') and pd.notna(row[column_mapping['pct_ach']]) else 0
+                cum_booked_pct = float(row[column_mapping.get('cum_booked', column_mapping['employee'])]) if column_mapping.get('cum_booked') and pd.notna(row[column_mapping['cum_booked']]) else 0
+                
+                data.append({
+                    'employee': employee_name,
+                    'pct_ach': pct_ach,
+                    'cum_booked_pct': cum_booked_pct,
+                    'index': index  # Keep original order for x-axis
+                })
+        
+        print(f"Processed {len(data)} data points")
+        return jsonify(data)
+        
+    except FileNotFoundError as e:
+        print(f"File not found error: {e}")
+        return jsonify({'error': 'Client data Excel file not found'}), 404
+    except Exception as e:
+        print(f"Error in get_whale_curve_data: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to load whale curve data: {str(e)}'}), 500
 
 if __name__ == '__main__':
     with app.app_context():

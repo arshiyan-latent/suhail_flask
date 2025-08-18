@@ -1,5 +1,9 @@
 # agents/enriched_google_search.py
-import json, os, requests, tldextract
+import json, os, requests
+try:
+    import tldextract
+except ImportError:
+    tldextract = None
 from langgraph.prebuilt import create_react_agent
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field

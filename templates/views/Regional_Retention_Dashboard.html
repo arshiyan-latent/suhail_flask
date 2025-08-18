@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Regional Retention Dashboard - Suhail</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles matching SME Leader Dashboard */
+        .dashboard-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 text-white">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold">Regional Retention Dashboard</h1>
+            <div class="flex items-center space-x-4">
+                <a href="/smeleader/dashboard" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Back to Dashboard</a>
+                <a href="/" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Back to Chat</a>
+                <a href="/logout" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Logout</a>
+            </div>
+        </div>
+
+        <!-- Main Dashboard Layout: 25% Left Cards | 50% Center Graph | 25% Right Cards -->
+        <div class="flex gap-6">
+            <!-- Left Cards Column (25%) - TOP 25% COHORT -->
+            <div class="w-1/4 space-y-6">
+                <!-- Cohort Header -->
+                <div class="text-center mb-4">
+                    <div class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-emerald-500/20 to-green-600/20 rounded-lg border border-emerald-400/30">
+                        <div class="w-3 h-3 bg-emerald-400 rounded-full mr-2 animate-pulse"></div>
+                        <span class="text-emerald-300 font-semibold text-sm">TOP 25% COHORT</span>
+                    </div>
+                    <div class="text-emerald-200/60 text-xs mt-1">Highest Booked Volume</div>
+                </div>
+
+                <!-- Top Left Card: Avg. Book GWP -->
+                <div class="dashboard-card rounded-xl p-6 border-l-4 border-emerald-400/50">
+                    <div class="flex flex-col">
+                        <div class="text-white/70 text-sm font-medium mb-2">Median Book GWP</div>
+                        <div class="text-3xl font-bold text-emerald-400">12M <span class="text-lg">SAR</span></div>
+                    </div>
+                </div>
+
+                <!-- Middle Left Card: Avg. Tenure -->
+                <div class="dashboard-card rounded-xl p-6 border-l-4 border-emerald-400/50">
+                    <div class="flex flex-col">
+                        <div class="text-white/70 text-sm font-medium mb-2">Median Tenure</div>
+                        <div class="text-3xl font-bold text-emerald-400">1,2 <span class="text-lg">Years</span></div>
+                    </div>
+                </div>
+
+                <!-- Bottom Left Card: RR -->
+                <div class="dashboard-card rounded-xl p-6 border-l-4 border-emerald-400/50">
+                    <div class="flex flex-col">
+                        <div class="text-white/70 text-sm font-medium mb-2">RR</div>
+                        <div class="text-3xl font-bold text-emerald-400">90%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Center Graph (50%) -->
+            <div class="w-1/2">
+                <div class="dashboard-card rounded-xl p-6 h-full">
+                    <h3 class="text-xl font-semibold mb-4 text-center">Whale Curve Analysis</h3>
+                    <div id="main-chart" class="h-96 rounded-lg border border-white/20"></div>
+                </div>
+            </div>
+
+            <!-- Right Cards Column (25%) - BOTTOM 25% COHORT -->
+            <div class="w-1/4 space-y-6">
+                <!-- Cohort Header -->
+                <div class="text-center mb-4">
+                    <div class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-red-500/20 to-rose-600/20 rounded-lg border border-red-400/30">
+                        <div class="w-3 h-3 bg-red-400 rounded-full mr-2 animate-pulse"></div>
+                        <span class="text-red-300 font-semibold text-sm">BOTTOM 25% COHORT</span>
+                    </div>
+                    <div class="text-red-200/60 text-xs mt-1">Lowest Booked Volume</div>
+                </div>
+
+                <!-- Top Right Card: Avg. Book GWP -->
+                <div class="dashboard-card rounded-xl p-6 border-l-4 border-red-400/50">
+                    <div class="flex flex-col">
+                        <div class="text-white/70 text-sm font-medium mb-2">Median Book GWP</div>
+                        <div class="text-3xl font-bold text-red-400">22M <span class="text-lg">SAR</span></div>
+                    </div>
+                </div>
+
+                <!-- Middle Right Card: Median Tenure -->
+                <div class="dashboard-card rounded-xl p-6 border-l-4 border-red-400/50">
+                    <div class="flex flex-col">
+                        <div class="text-white/70 text-sm font-medium mb-2">Median Tenure</div>
+                        <div class="text-3xl font-bold text-red-400">2.3 <span class="text-lg">Years</span></div>
+                    </div>
+                </div>
+
+                <!-- Bottom Right Card: RR -->
+                <div class="dashboard-card rounded-xl p-6 border-l-4 border-red-400/50">
+                    <div class="flex flex-col">
+                        <div class="text-white/70 text-sm font-medium mb-2">RR</div>
+                        <div class="text-3xl font-bold text-red-400">65%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    <!-- D3.js for chart implementation -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+        // Load and render the whale curve chart
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Regional Retention Dashboard loaded');
+            loadWhaleCurveChart();
+        });
+
+        async function loadWhaleCurveChart() {
+            try {
+                console.log('Loading Whale Curve chart data...');
+                const response = await fetch('/api/regional/whale-curve-data');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received whale curve data:', data);
+                
+                if (!data || data.length === 0) {
+                    document.getElementById('main-chart').innerHTML = 
+                        '<div class="flex items-center justify-center h-full text-white/50">No data available</div>';
+                    return;
+                }
+                
+                renderWhaleCurveChart(data);
+            } catch (error) {
+                console.error('Error loading whale curve data:', error);
+                document.getElementById('main-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50">Error loading data: ${error.message}</div>`;
+            }
+        }
+
+        function renderWhaleCurveChart(data) {
+            // Clear any existing chart
+            d3.select("#main-chart").selectAll("*").remove();
+            
+            // Set dimensions and margins
+            const margin = {top: 40, right: 80, bottom: 80, left: 70};
+            const width = document.getElementById('main-chart').offsetWidth - margin.left - margin.right;
+            const height = 384 - margin.top - margin.bottom; // h-96 = 384px
+            
+            // Create SVG
+            const svg = d3.select("#main-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            // Sort data by employee index to maintain order
+            data = data.sort((a, b) => a.index - b.index);
+            
+            console.log('Sorted whale curve data:', data);
+            
+            // Create scales
+            const xScale = d3.scaleBand()
+                .domain(data.map(d => d.employee))
+                .range([0, width])
+                .padding(0.1);
+            
+            // Create separate Y scales for left and right axes (convert to full percentages)
+            const yScaleLeft = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.pct_ach * 100) * 1.1])
+                .nice()
+                .range([height, 0]);
+            
+            const yScaleRight = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.cum_booked_pct * 100) * 1.1])
+                .nice()
+                .range([height, 0]);
+            
+            // Add X axis with completely vertical labels
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.8)")
+                .style("font-size", "9px")
+                .attr("transform", "rotate(-90)")
+                .style("text-anchor", "end")
+                .attr("dx", "-0.8em")
+                .attr("dy", "0.2em");
+            
+            // Add left Y axis (%Ach)
+            svg.append("g")
+                .call(d3.axisLeft(yScaleLeft)
+                    .tickFormat(d => d + "%")
+                    .ticks(6))
+                .selectAll("text")
+                .style("fill", "#3b82f6") // Blue color to match %Ach line
+                .style("font-size", "11px");
+            
+            // Add right Y axis (Cum-Booked%)
+            svg.append("g")
+                .attr("transform", `translate(${width},0)`)
+                .call(d3.axisRight(yScaleRight)
+                    .tickFormat(d => d + "%")
+                    .ticks(6))
+                .selectAll("text")
+                .style("fill", "#ef4444") // Red color to match Cum-Booked% line
+                .style("font-size", "11px");
+            
+            // Style axis lines
+            svg.selectAll(".domain")
+                .style("stroke", "rgba(255,255,255,0.4)");
+            
+            svg.selectAll(".tick line")
+                .style("stroke", "rgba(255,255,255,0.2)");
+            
+            // Create line generators
+            const line1 = d3.line()
+                .x(d => xScale(d.employee) + xScale.bandwidth() / 2)
+                .y(d => yScaleLeft(d.pct_ach * 100))
+                .curve(d3.curveMonotoneX);
+            
+            const line2 = d3.line()
+                .x(d => xScale(d.employee) + xScale.bandwidth() / 2)
+                .y(d => yScaleRight(d.cum_booked_pct * 100))
+                .curve(d3.curveMonotoneX);
+            
+            // Add %Ach line (blue)
+            svg.append("path")
+                .datum(data)
+                .attr("fill", "none")
+                .attr("stroke", "#3b82f6")
+                .attr("stroke-width", 3)
+                .attr("d", line1);
+            
+            // Add Cum-Booked% line (red)
+            svg.append("path")
+                .datum(data)
+                .attr("fill", "none")
+                .attr("stroke", "#ef4444")
+                .attr("stroke-width", 3)
+                .attr("d", line2);
+            
+            // Add legend
+            const legend = svg.append("g")
+                .attr("transform", `translate(${width - 120}, 20)`);
+            
+            // %Ach legend item
+            legend.append("line")
+                .attr("x1", 0)
+                .attr("y1", 0)
+                .attr("x2", 20)
+                .attr("y2", 0)
+                .attr("stroke", "#3b82f6")
+                .attr("stroke-width", 3);
+            
+            legend.append("text")
+                .attr("x", 25)
+                .attr("y", 0)
+                .attr("dy", "0.35em")
+                .style("fill", "rgba(255,255,255,0.9)")
+                .style("font-size", "12px")
+                .text("%Ach");
+            
+            // Cum-Booked% legend item
+            legend.append("line")
+                .attr("x1", 0)
+                .attr("y1", 20)
+                .attr("x2", 20)
+                .attr("y2", 20)
+                .attr("stroke", "#ef4444")
+                .attr("stroke-width", 3);
+            
+            legend.append("text")
+                .attr("x", 25)
+                .attr("y", 20)
+                .attr("dy", "0.35em")
+                .style("fill", "rgba(255,255,255,0.9)")
+                .style("font-size", "12px")
+                .text("Cum-Booked%");
+            
+            // Add Y-axis labels
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left + 20)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .style("fill", "#3b82f6")
+                .style("font-size", "12px")
+                .style("font-weight", "600")
+                .text("YTD - %Ach");
+            
+            svg.append("text")
+                .attr("transform", "rotate(90)")
+                .attr("y", 0 - width - margin.right + 20)
+                .attr("x", height / 2)
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .style("fill", "#ef4444")
+                .style("font-size", "12px")
+                .style("font-weight", "600")
+                .text("Cum-Booked%");
+            
+            // Add tooltips
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "whale-curve-tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.9)")
+                .style("color", "white")
+                .style("padding", "10px")
+                .style("border-radius", "6px")
+                .style("font-size", "12px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000")
+                .style("box-shadow", "0 4px 6px rgba(0,0,0,0.3)");
+            
+            // Add interactive overlay for tooltips
+            svg.selectAll(".overlay")
+                .data(data)
+                .enter().append("rect")
+                .attr("class", "overlay")
+                .attr("x", d => xScale(d.employee))
+                .attr("width", xScale.bandwidth())
+                .attr("y", 0)
+                .attr("height", height)
+                .attr("fill", "transparent")
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .95);
+                    tooltip.html(`
+                        <div style="border-bottom: 1px solid rgba(255,255,255,0.3); margin-bottom: 6px; padding-bottom: 4px;">
+                            <strong>${d.employee}</strong>
+                        </div>
+                        <div style="color: #3b82f6; margin-bottom: 3px;">
+                            <strong>%Ach:</strong> ${(d.pct_ach * 100).toFixed(1)}%
+                        </div>
+                        <div style="color: #ef4444;">
+                            <strong>Cum-Booked%:</strong> ${(d.cum_booked_pct * 100).toFixed(1)}%
+                        </div>
+                    `)
+                        .style("left", (event.pageX + 15) + "px")
+                        .style("top", (event.pageY - 10) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .duration(300)
+                        .style("opacity", 0);
+                });
+        }
+    </script>
+</body>
+</html>
