@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import json
 
 from langchain_openai import ChatOpenAI
 from langgraph_supervisor import create_supervisor
@@ -7,7 +8,7 @@ from agents.package_detals.agent import agent_policy_package_details
 from agents.spreadsheet.spreadsheet_agent import agent_spreadsheet_data
 from langgraph.checkpoint.sqlite import SqliteSaver
 from agents.notification_helper import format_notifications_for_prompt
-
+from agents.enriched_google_search import EnrichedGoogleSearch, agent_enriched_google_search
 
 from dotenv import load_dotenv
 
@@ -39,7 +40,8 @@ conn = sqlite3.connect("database/suhail_database.db",check_same_thread=False)
 
 memory = SqliteSaver(conn)
 
-def get_supervisor_prompt(user_id=None):
+
+def get_supervisor_prompt(user_id=None, company_name:str = "", other_inputs: dict | None = None):
     notifications = format_notifications_for_prompt(user_id=user_id)
     prompt_template = f'''
 First introduction message MUST be displayed in BOTH arabic and english, regardless of user input.
@@ -64,6 +66,9 @@ These are the tools you have access to:
 
 2. **Spreadsheet Data Agent**: Handles ALL questions involving numbers, benchmarks, historical data, premiums, claims, loss ratios, regional comparisons, and any numerical analysis from the historical data in test_historical.xlsx
    - Tool: assess_new_offer - Evaluates feasibility and likelihood of success for new insurance offers using historical benchmarks and sales logic
+
+3. **Enriched Google Search Agent**: Fetches real-world company insights to provide context for sales discussions
+    - Tool: enriched_google_search - Returns a one-liner summary and multiple web results
 
 **ROUTING RULES FOR NUMERICAL DATA:**
 - ANY question about cost per claim, Loss Ratio (LR), benchmarks, historical data, regional averages, premium calculations → Route to Spreadsheet Data Agent
@@ -90,18 +95,19 @@ For these inputs, request them from the user in a friendly manner and dont provi
 - For input 6: Only accept numbers or exactly "I don't know"
 - Do not proceed until ALL 7 inputs have valid values
 
-❌ **DO NOT proceed with any analysis, tool usage, or recommendations until ALL 7 inputs are collected and validated.**
-✅ **Only after collecting all 7 VALID inputs, use the assess_new_offer tool to get benchmark data, then use that data to build comprehensive comparison tables and recommendations.**
-
+"❌ Do NOT proceed with any analysis, other tools, or recommendations until ALL 7 inputs are collected and validated.",
+"✅ Exception: You MUST call the `enriched_google_search` tool immediately after the company name is provided to populate `real_world_company_insights`. All other tools must wait.",
+"After calling `enriched_google_search`, send a brief assistant message:
+`**Company insight**: <one_liner>` and then continue with the next required inputs."
 {{
   "prompt": {{
     "instructions": [
       "You only handle **health insurance** inquiries. Politely decline all others. If user asks a question about relevant financials, or cost per claim, you MUST answer.",
       "Ask the user whether this business opportunity is a **New Business** or a **Renewal**.",
       "After that, collect company name in both English and Arabic. Format: 'Company Name (EN | AR)'",
+     "As soon as the company name is received, call the `enriched_google_search` tool with the provided company name. Use the returned `one_liner` as the value for `real_world_company_insights`, and weave in relevant context from the results later.",
       "Once you collect all required inputs, proceed with the simulation **automatically** without asking for confirmation.",
       "You can answer questions about cost/claim, Loss Ratio (LR), and other relevant calculation questions.",
-      "As soon as the company name is received, call the Enriched Google Search tool. Do NOT summarize its results. Instead, extract a one-liner about what the company does, and highlight any recent relevant news (e.g., expansions, funding, market changes). Use the information gathered smartly throughout rest of conversation.",
       "Always populate all table values (no TBDs). Do not ask the user to continue once you have the necessary inputs — proceed immediately."
     ],
     "introduction": {{
@@ -110,7 +116,7 @@ For these inputs, request them from the user in a friendly manner and dont provi
     }},
     "context": {{
       "company_name": "Company Name (English | Arabic)",
-      "real_world_company_insights": "{{EnrichedGoogleSearch(company_name)}}"
+      "real_world_company_insights": ""
     }},
     "steps": [
       {{
@@ -191,7 +197,7 @@ def create_agent_supervisor(user_id=None):
         raise ValueError("user_id is required to create a supervisor agent")
     
     supervisor = create_supervisor(
-        agents=[agent_policy_package_details(llm=llm), agent_spreadsheet_data(llm=llm)],
+        agents=[agent_policy_package_details(llm=llm), agent_spreadsheet_data(llm=llm), agent_enriched_google_search(llm=llm)],
         model=llm,
         prompt=get_supervisor_prompt(user_id),
         output_mode="last_message"
