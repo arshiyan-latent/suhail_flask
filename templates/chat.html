@@ -368,9 +368,15 @@
             const blob = new Blob(chunks, { type });
             const useOgg = type.includes('ogg');
 
+            // ✅ Ensure we have a chat for this recording
+            if (!window.currentChatId) {
+              await createNewChatAndAssign(currentClientName);
+            }
+
             const form = new FormData();
             form.append('audio', blob, `meeting.${useOgg ? 'ogg' : 'webm'}`);
             form.append('title', 'Live Meeting');
+            form.append('chat_id', String(window.currentChatId || ''));
 
             const note = document.createElement('span');
             note.className = 'text-white/70 text-xs';
@@ -381,8 +387,13 @@
               const resp = await fetch('/api/transcribe', { method:'POST', body: form });
               const data = await resp.json();
               if (!resp.ok || !data.success) throw new Error(data.error || 'Failed');
+
               note.textContent = 'Saved ✓';
-              await loadTranscripts();      // refresh sidebar list
+
+              // ✅ Refresh sidebar AND chat
+              await loadTranscripts();                                      // sidebar
+              if (window.currentChatId) await loadChatById(window.currentChatId);
+
             } catch (e) {
               console.error(e); note.textContent = 'Failed';
             } finally {
@@ -390,6 +401,7 @@
               stopAllTracks();
             }
           };
+
 
           mediaRecorder.start();
         } catch (err) {
@@ -1154,17 +1166,18 @@
         const li = document.createElement('li');
         li.className = "p-2 rounded bg-white/10 hover:bg-white/20 transition-all";
         li.innerHTML = `
-          <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0">
-              <div class="font-medium truncate">${t.title}</div>
-              <div class="text-white/60 text-xs truncate">${t.preview || ''}</div>
-            </div>
-            <div class="flex items-center gap-2 flex-shrink-0">
-              <a href="${t.file_url}" target="_blank" class="text-white/80 hover:text-white text-xs underline">Download</a>
-              <button class="text-red-400 hover:text-red-300 text-xs" title="Delete">Delete</button>
-            </div>
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0">
+            <div class="font-medium truncate">${t.title}</div>
+            <div class="text-white/60 text-xs truncate">${t.preview || ''}</div>
           </div>
-        `;
+          <div class="flex items-center gap-2 flex-shrink-0">
+            ${t.audio_url ? `<a href="${t.audio_url}" target="_blank" class="text-white/80 hover:text-white text-xs underline">Audio</a>` : ''}
+            <a href="${t.file_url}" target="_blank" class="text-white/80 hover:text-white text-xs underline">PDF</a>
+            <button class="text-red-400 hover:text-red-300 text-xs" title="Delete">Delete</button>
+          </div>
+        </div>
+      `;
         li.querySelector('button[title="Delete"]').addEventListener('click', async (e) => {
           e.stopPropagation();
           if (!confirm('Delete this transcript?')) return;

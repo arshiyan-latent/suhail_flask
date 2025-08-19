@@ -5,7 +5,7 @@ from agents.summary.summary_agent import extract_transcript, generate_summary
 from agents.manager_agent import create_manager_agent
 from agents.general_agent import supervisor_agent_general
 from dotenv import load_dotenv
-import os, tempfile, time, json, subprocess
+import os, tempfile, time, json, subprocess, shutil
 # import logging
 from langchain_openai import ChatOpenAI
 from pathlib import Path
@@ -53,6 +53,14 @@ db.init_app(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+AUDIO_DIR = Path("uploads") / "audio"
+
+def _to_int_or_none(v):
+    try:
+        return int(str(v).strip())
+    except Exception:
+        return None
 
 def _wrap_lines(line, max_width, canv, font_name="Helvetica", font_size=10):
     """Yield wrapped substrings that fit max_width."""
@@ -881,6 +889,8 @@ def get_chat_summary():
 def transcribe_audio():
     try:
         title = request.form.get('title', 'Live Meeting')
+        raw_chat_id = request.form.get('chat_id', '')   
+        chat_pk = _to_int_or_none(raw_chat_id)          
 
         if 'audio' not in request.files:
             return jsonify({'error': 'No audio file provided'}), 400
@@ -888,7 +898,7 @@ def transcribe_audio():
         audio_file = request.files['audio']
         filename = secure_filename(audio_file.filename or 'meeting.webm')
 
-        # Save to temp
+        # Save to temp for transcription call
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp:
             tmp_path = tmp.name
             audio_file.save(tmp_path)
@@ -907,7 +917,7 @@ def transcribe_audio():
             )
 
         # Parse via dict
-        rd = resp.model_dump() if hasattr(resp, "model_dump") else {}
+        rd = resp.model_dump() if hasattr(resp, "model_dump") else (resp or {})
         segments = []
         if use_verbose and isinstance(rd.get("segments"), list):
             for s in rd["segments"]:
@@ -922,7 +932,7 @@ def transcribe_audio():
 
         # Diarization only if timestamps exist
         if use_verbose:
-            diar_segments = diarize_file(tmp_path)  # returns None if disabled
+            diar_segments = diarize_file(tmp_path)  # your helper; returns None if disabled
             labeled = assign_speakers(segments, diar_segments)
         else:
             labeled = [{"speaker": "Speaker 1", **s} for s in segments]
@@ -961,38 +971,78 @@ def transcribe_audio():
             meta={"Model": model_name, "Speakers": str(num_speakers)}
         )
 
-        # DB row (store preview text & file path)
+        # Save original audio for download
+        AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+        user_audio_dir = AUDIO_DIR / str(current_user.id)
+        user_audio_dir.mkdir(parents=True, exist_ok=True)
+
+        ext = os.path.splitext(secure_filename(audio_file.filename or ""))[1] or ".webm"
+        audio_path = user_audio_dir / f"{stamp}_{safe_title}{ext}"
+        shutil.copy(tmp_path, str(audio_path))  # requires `import shutil`
+
+        # DB row
         transcript = Transcript(
             user_id=current_user.id,
-            chat_id=None,
+            chat_id=chat_pk if chat_pk else None,
             title=title,
-            text=pretty_text  # used for sidebar preview
+            text=pretty_text
         )
         try:
             transcript.file_path = str(pdf_path)
             transcript.speakers_count = num_speakers
             transcript.language = rd.get("language")
+            transcript.audio_path = str(audio_path)
         except Exception:
             pass
 
         db.session.add(transcript)
         db.session.commit()
 
-        # Cleanup temp
-        try: os.remove(tmp_path)
-        except Exception: pass
+        # Build URLs
+        pdf_url = url_for('download_transcript', transcript_id=transcript.id)
+        audio_url = url_for('download_transcript_audio', transcript_id=transcript.id)
 
+        # Post into current chat so it shows inline (optional but requested)
+        chat_id = (request.form.get('chat_id') or '').strip() or None
+
+        # Post a message into the chat
+        if chat_id:
+            # make sure the chat belongs to this user; avoids foreign key / wrong chat
+            sess = ChatSession.query.filter_by(id=chat_id, user_id=current_user.id).first()
+            if sess:
+                parts = [
+                    f"🎙️ **New recording**: {title}",
+                    f"- [Download audio]({audio_url})" if audio_url else None,
+                    f"- [Download transcript (PDF)]({pdf_url})"
+                ]
+                msg_text = "\n".join(p for p in parts if p)
+
+                try:
+                    db.session.add(ChatMessage(
+                        session_id=chat_id,           # ← keep as string
+                        user_id=current_user.id,
+                        message=msg_text,
+                        sender='bot'                  # matches the rest of your app
+                    ))
+                    db.session.commit()
+                except Exception as e:
+                    db.session.rollback()
+                    app.logger.exception("Failed to insert chat message")
+
+        # Response (so sidebar + client can refresh)
         return jsonify({
             "success": True,
             "transcript_id": transcript.id,
             "title": title,
-            "file_url": url_for('download_transcript', transcript_id=transcript.id),
+            "file_url": pdf_url,
+            "audio_url": audio_url,
             "speakers": num_speakers
         })
 
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
 
     
 @app.route('/v1/transcripts', methods=['GET'])
@@ -1001,14 +1051,27 @@ def list_transcripts():
     rows = Transcript.query.filter_by(user_id=current_user.id).order_by(Transcript.created_at.desc()).all()
     out = []
     for t in rows:
+        # PDF URL
+        pdf_url = url_for('download_transcript', transcript_id=t.id)
+
+        # Prefer explicit audio_path; else infer from PDF stem
+        audio_path = getattr(t, "audio_path", None)
+        if not (audio_path and os.path.exists(audio_path)):
+            audio_path = _find_audio_for_transcript(t)
+
+        audio_url = url_for('download_transcript_audio', transcript_id=t.id) if audio_path else None
+
         out.append({
             "id": t.id,
             "title": t.title,
             "created_at": t.created_at.isoformat(),
             "preview": (t.text[:200] + '...') if len(t.text) > 200 else t.text,
-            "file_url": url_for('download_transcript', transcript_id=t.id)
+            "file_url": pdf_url,
+            "audio_url": audio_url,
+            "has_audio": bool(audio_url),  # optional convenience flag for UI
         })
     return jsonify(out)
+
 
 @app.route('/v1/transcripts/<int:transcript_id>/download', methods=['GET'])
 @login_required
@@ -1018,21 +1081,69 @@ def download_transcript(transcript_id):
         return jsonify({"error": "Not found"}), 404
     return send_file(t.file_path, as_attachment=True, download_name=os.path.basename(t.file_path))
 
+@app.route('/v1/transcripts/<int:transcript_id>/audio', methods=['GET'])
+@login_required
+def download_transcript_audio(transcript_id):
+    t = Transcript.query.filter_by(id=transcript_id, user_id=current_user.id).first()
+    if not t:
+        return jsonify({"error": "Not found"}), 404
+    ap = _find_audio_for_transcript(t)
+    if not ap or not os.path.exists(ap):
+        return jsonify({"error": "Audio not found"}), 404
+    return send_file(ap, as_attachment=True, download_name=os.path.basename(ap))
+
+
 @app.route('/v1/transcripts/<int:transcript_id>', methods=['DELETE'])
 @login_required
 def delete_transcript(transcript_id):
     t = Transcript.query.filter_by(id=transcript_id, user_id=current_user.id).first()
     if not t:
         return jsonify({"error": "Not found"}), 404
-    # remove file
+
+    # delete PDF
     try:
         if t.file_path and os.path.exists(t.file_path):
             os.remove(t.file_path)
     except Exception as e:
         print("file delete warning:", e)
+
+    # delete audio (explicit path or inferred)
+    try:
+        ap = getattr(t, "audio_path", None)
+        if not (ap and os.path.exists(ap)):
+            ap = _find_audio_for_transcript(t)
+        if ap and os.path.exists(ap):
+            os.remove(ap)
+    except Exception as e:
+        print("audio delete warning:", e)
+
     db.session.delete(t)
     db.session.commit()
     return jsonify({"success": True})
+
+
+def _find_audio_for_transcript(t):
+    """Return absolute path to audio file for this transcript or None."""
+    # Prefer explicit column if present
+    ap = getattr(t, "audio_path", None)
+    if ap and os.path.exists(ap):
+        return ap
+
+    # Try to infer from transcript PDF name
+    stem = None
+    try:
+        stem = Path(t.file_path).stem  # e.g. "1723953123_Meeting title"
+    except Exception:
+        pass
+
+    if stem:
+        user_dir = AUDIO_DIR / str(t.user_id)
+        for ext in (".webm", ".wav", ".m4a", ".mp3", ".ogg"):
+            cand = user_dir / f"{stem}{ext}"
+            if cand.exists():
+                return str(cand)
+    return None
+
 
 @app.route('/v1/chat/report', methods=['POST'])
 @login_required
