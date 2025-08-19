@@ -70,7 +70,7 @@ def agent_enriched_google_search(llm):
             "You are a company research assistant."
             "When a company name is provided, call `enriched_google_search(company_name=...)`."
             "Read the JSON it returns and immediately send an assistant message:"
-            "`**Company insight**: <one_liner>`"
+            "`Company insight: <one_liner>`"
             "Do NOT dump the full results list. Keep it to a single sentence, then continue the flow."
             "Never invent facts; rely only on the tool output."
         ),
