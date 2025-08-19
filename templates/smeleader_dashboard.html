@@ -79,14 +79,20 @@
                     <button id="live-mode" class="px-3 py-1 text-sm rounded-md transition-all bg-white/20 text-white font-medium">Live</button>
                     <button id="whatif-mode" class="px-3 py-1 text-sm rounded-md transition-all text-white/70 hover:text-white">What-If Lab</button>
                 </div>
-                
-                <!-- Views Dropdown -->
+                <!-- Views Dropdown (Added) -->
                 <div class="relative" id="views-container">
-                    <a href="/smeleader/dashboard/views/Regional_Retention_Dashboard.html" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all text-sm font-medium block text-center">
-                        Regional Retention Dashboard
-                    </a>
+                    <button id="views-dropdown-btn" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all text-sm font-medium flex items-center space-x-2">
+                        <span>Views</span>
+                        <svg id="views-dropdown-icon" class="w-4 h-4 text-white/70 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div id="views-dropdown-menu" class="absolute right-0 mt-2 w-56 bg-gray-900/95 backdrop-blur-md border border-white/10 rounded-lg shadow-lg p-2 opacity-0 invisible transform scale-95 transition-all z-50">
+                        <div class="text-white/60 text-xs px-2 py-1">Available Views</div>
+                        <a href="/smeleader/dashboard/views/Regional_Retention_Dashboard.html" class="flex items-center px-3 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 rounded-md transition-all group">
+                            <svg class="w-4 h-4 mr-3 text-white/60 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2M9 9a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                            Regional Retention Dashboard
+                        </a>
+                    </div>
                 </div>
-                
                 <a href="/" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Back to Chat</a>
                 <a href="/logout" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Logout</a>
             </div>
@@ -840,7 +846,38 @@
             document.getElementById('reset-scenario').addEventListener('click', resetScenarioValues);
             
             // Views dropdown functionality
-            initializeViewsDropdown();
+            const viewsDropdownBtn = document.getElementById('views-dropdown-btn');
+            const viewsDropdownMenu = document.getElementById('views-dropdown-menu');
+            const viewsDropdownIcon = document.getElementById('views-dropdown-icon');
+            let isViewsDropdownOpen = false;
+            
+            // Toggle dropdown on button click
+            viewsDropdownBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                isViewsDropdownOpen = !isViewsDropdownOpen;
+                
+                if (isViewsDropdownOpen) {
+                    // Show dropdown
+                    viewsDropdownMenu.classList.remove('opacity-0', 'invisible', 'scale-95');
+                    viewsDropdownMenu.classList.add('opacity-100', 'visible', 'scale-100');
+                    viewsDropdownIcon.style.transform = 'rotate(180deg)';
+                } else {
+                    // Hide dropdown
+                    viewsDropdownMenu.classList.remove('opacity-100', 'visible', 'scale-100');
+                    viewsDropdownMenu.classList.add('opacity-0', 'invisible', 'scale-95');
+                    viewsDropdownIcon.style.transform = 'rotate(0deg)';
+                }
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!document.getElementById('views-container').contains(e.target)) {
+                    isViewsDropdownOpen = false;
+                    viewsDropdownMenu.classList.remove('opacity-100', 'visible', 'scale-100');
+                    viewsDropdownMenu.classList.add('opacity-0', 'invisible', 'scale-95');
+                    viewsDropdownIcon.style.transform = 'rotate(0deg)';
+                }
+            });
             
             // Window resize handler to maintain proper scaling
             window.addEventListener('resize', function() {
@@ -869,105 +906,6 @@
             // Add data attributes to cards for easy updating
             addDataAttributesToCards();
         });
-
-        // Views dropdown functionality
-        function initializeViewsDropdown() {
-            const dropdownBtn = document.getElementById('views-dropdown-btn');
-            const dropdownMenu = document.getElementById('views-dropdown-menu');
-            const dropdownIcon = document.getElementById('views-dropdown-icon');
-            const viewsLoading = document.getElementById('views-loading');
-            const viewsList = document.getElementById('views-list');
-            let isDropdownOpen = false;
-            
-            // Toggle dropdown
-            dropdownBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                if (isDropdownOpen) {
-                    closeDropdown();
-                } else {
-                    openDropdown();
-                }
-            });
-            
-            // Close dropdown when clicking outside
-            document.addEventListener('click', function(e) {
-                if (!dropdownBtn.contains(e.target) && !dropdownMenu.contains(e.target)) {
-                    closeDropdown();
-                }
-            });
-            
-            // Close dropdown on escape key
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && isDropdownOpen) {
-                    closeDropdown();
-                }
-            });
-            
-            function openDropdown() {
-                isDropdownOpen = true;
-                dropdownMenu.classList.remove('opacity-0', 'invisible', 'scale-95');
-                dropdownMenu.classList.add('opacity-100', 'visible', 'scale-100');
-                dropdownIcon.style.transform = 'rotate(180deg)';
-                
-                // Load views if not already loaded
-                if (viewsList.innerHTML.trim() === '') {
-                    loadDashboardViews();
-                }
-            }
-            
-            function closeDropdown() {
-                isDropdownOpen = false;
-                dropdownMenu.classList.remove('opacity-100', 'visible', 'scale-100');
-                dropdownMenu.classList.add('opacity-0', 'invisible', 'scale-95');
-                dropdownIcon.style.transform = 'rotate(0deg)';
-            }
-            
-            async function loadDashboardViews() {
-                try {
-                    viewsLoading.classList.remove('hidden');
-                    viewsList.classList.add('hidden');
-                    
-                    const response = await fetch('/api/dashboard-views');
-                    const views = await response.json();
-                    
-                    // Hide loading, show list
-                    viewsLoading.classList.add('hidden');
-                    viewsList.classList.remove('hidden');
-                    
-                    if (views.length === 0) {
-                        viewsList.innerHTML = `
-                            <div class="px-3 py-2 text-white/50 text-sm text-center">
-                                No views available
-                            </div>
-                        `;
-                        return;
-                    }
-                    
-                    // Populate views list
-                    viewsList.innerHTML = views.map(view => `
-                        <a href="/smeleader/dashboard/views/${view.file}" 
-                           class="flex items-center px-3 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 rounded-md transition-all group">
-                            <svg class="w-4 h-4 mr-3 text-white/60 group-hover:text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                            </svg>
-                            ${view.name}
-                        </a>
-                    `).join('');
-                    
-                } catch (error) {
-                    console.error('Error loading views:', error);
-                    viewsLoading.classList.add('hidden');
-                    viewsList.classList.remove('hidden');
-                    viewsList.innerHTML = `
-                        <div class="px-3 py-2 text-red-400 text-sm text-center">
-                            Error loading views
-                        </div>
-                    `;
-                }
-            }
-        }
 
         function addDataAttributesToCards() {
             // Add data attributes to dashboard cards for easy identification
