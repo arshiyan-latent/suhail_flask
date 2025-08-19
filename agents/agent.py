@@ -116,7 +116,8 @@ For these inputs, request them from the user in a friendly manner and dont provi
     }},
     "context": {{
       "company_name": "Company Name (English | Arabic)",
-      "real_world_company_insights": ""
+      "real_world_company_insights": "" --> must use agent_enriched_google_search when company name is received and provide a one-liner summary 
+
     }},
     "steps": [
       {{

@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Regional Retention Dashboard - Suhail</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles matching SME Leader Dashboard */
+        .dashboard-card {
+            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        /* Custom slider styles */
+        .slider {
+            background: linear-gradient(to right, rgba(59, 130, 246, 0.3) 0%, rgba(59, 130, 246, 0.3) 50%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.2) 100%);
+        }
+        
+        .slider::-webkit-slider-thumb {
+            appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            cursor: pointer;
+            border: 2px solid rgba(255,255,255,0.3);
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+        }
+        
+        .slider::-moz-range-thumb {
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            cursor: pointer;
+            border: 2px solid rgba(255,255,255,0.3);
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+        }
+        
+        /* Animation classes */
+        .metric-change {
+            transition: all 0.3s ease-in-out;
+        }
+        
+        .chart-transition {
+            transition: opacity 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 text-white">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold">Regional Retention Dashboard</h1>
+            <div class="flex items-center space-x-4">
+                <!-- Mode Toggle -->
+                <div class="flex items-center bg-white/10 rounded-lg p-1">
+                    <button id="live-mode" class="px-3 py-1 text-sm rounded-md transition-all bg-white/20 text-white font-medium">Live</button>
+                    <button id="whatif-mode" class="px-3 py-1 text-sm rounded-md transition-all text-white/70 hover:text-white">What-If Lab</button>
+                </div>
+                
+                <a href="/smeleader/dashboard" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Back to Dashboard</a>
+                <a href="/" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Back to Chat</a>
+                <a href="/logout" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Logout</a>
+            </div>
+        </div>
+
+        <!-- Main Dashboard Layout: 25% Left Cards | 50% Center Graph | 25% Right Cards -->
+        <div id="dashboard-content" class="flex gap-6 transition-all duration-300">
+            <!-- Left Cards Column (25%) - TOP 25% COHORT -->
+            <div class="w-1/4 space-y-6 dashboard-section">
+                <!-- Cohort Header -->
+                <div class="text-center mb-4">
+                    <div class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-emerald-500/20 to-green-600/20 rounded-lg border border-emerald-400/30">
+                        <div class="w-3 h-3 bg-emerald-400 rounded-full mr-2 animate-pulse"></div>
+                        <span class="text-emerald-300 font-semibold text-sm">TOP 25% COHORT</span>
+                    </div>
+                    <div class="text-emerald-200/60 text-xs mt-1">High % Target Achieved</div>
+                </div>
+
+                <!-- Top Left Card: Avg. Book GWP -->
+                <div class="dashboard-card rounded-xl p-6 border-l-4 border-emerald-400/50">
+                    <div class="flex flex-col">
+                        <div class="text-white/70 text-sm font-medium mb-2">Median Book GWP</div>
+                        <div class="text-3xl font-bold text-emerald-400" data-card="top-gwp">12M <span class="text-lg">SAR</span></div>
+                    </div>
+                </div>
+
+                <!-- Middle Left Card: Avg. Tenure -->
+                <div class="dashboard-card rounded-xl p-6 border-l-4 border-emerald-400/50">
+                    <div class="flex flex-col">
+                        <div class="text-white/70 text-sm font-medium mb-2">Avg. Tenure</div>
+                        <div class="text-3xl font-bold text-emerald-400" data-card="top-tenure">1.2 <span class="text-lg">Years</span></div>
+                    </div>
+                </div>
+
+                <!-- Bottom Left Card: RR -->
+                <div class="dashboard-card rounded-xl p-6 border-l-4 border-emerald-400/50">
+                    <div class="flex flex-col">
+                        <div class="text-white/70 text-sm font-medium mb-2">RR</div>
+                        <div class="text-3xl font-bold text-emerald-400" data-card="top-rr">90%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Center Graph (50%) -->
+            <div class="w-1/2 dashboard-section">
+                <div class="dashboard-card rounded-xl p-6 h-full">
+                    <h3 class="text-xl font-semibold mb-4 text-center">Whale Curve Analysis</h3>
+                    <div id="main-chart" class="h-96 rounded-lg border border-white/20"></div>
+                </div>
+            </div>
+
+            <!-- Right Cards Column (25%) - BOTTOM 25% COHORT -->
+            <div class="w-1/4 space-y-6 dashboard-section">
+                <!-- Cohort Header -->
+                <div class="text-center mb-4">
+                    <div class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-red-500/20 to-rose-600/20 rounded-lg border border-red-400/30">
+                        <div class="w-3 h-3 bg-red-400 rounded-full mr-2 animate-pulse"></div>
+                        <span class="text-red-300 font-semibold text-sm">BOTTOM 25% COHORT</span>
+                    </div>
+                    <div class="text-red-200/60 text-xs mt-1">Low % Target Achieved</div>
+                </div>
+
+                <!-- Top Right Card: Avg. Book GWP -->
+                <div class="dashboard-card rounded-xl p-6 border-l-4 border-red-400/50">
+                    <div class="flex flex-col">
+                        <div class="text-white/70 text-sm font-medium mb-2">Median Book GWP</div>
+                        <div class="text-3xl font-bold text-red-400" data-card="bottom-gwp">22M <span class="text-lg">SAR</span></div>
+                    </div>
+                </div>
+
+                <!-- Middle Right Card: Median Tenure -->
+                <div class="dashboard-card rounded-xl p-6 border-l-4 border-red-400/50">
+                    <div class="flex flex-col">
+                        <div class="text-white/70 text-sm font-medium mb-2">Median Tenure</div>
+                        <div class="text-3xl font-bold text-red-400" data-card="bottom-tenure">2.3 <span class="text-lg">Years</span></div>
+                    </div>
+                </div>
+
+                <!-- Bottom Right Card: RR -->
+                <div class="dashboard-card rounded-xl p-6 border-l-4 border-red-400/50">
+                    <div class="flex flex-col">
+                        <div class="text-white/70 text-sm font-medium mb-2">RR</div>
+                        <div class="text-3xl font-bold text-red-400" data-card="bottom-rr">65%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    </div>
+
+    <!-- What-If Lab Scenario Panel -->
+    <div id="scenario-panel" class="fixed right-0 top-0 h-full w-80 bg-gray-900/95 backdrop-blur-md border-l border-white/20 transform translate-x-full transition-transform duration-300 z-50 hidden">
+        <div class="p-6 h-full overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-semibold text-white">Retention Levers</h3>
+                <button id="close-panel" class="text-white/70 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Scenario Controls -->
+            <div class="space-y-6">
+                <!-- Main Scenario Control -->
+                <div class="bg-white/5 rounded-lg p-4 border border-white/10">
+                    <h4 class="text-sm font-semibold text-white mb-4">Top 25% Portfolio Share</h4>
+                    <!-- Slider Control -->
+                    <div class="mb-4">
+                        <div class="flex justify-between text-xs text-white/60 mb-2">
+                            <span id="slider-min-label">15%</span>
+                            <span id="slider-value" class="text-white font-medium">24.2%</span>
+                            <span id="slider-max-label">40%</span>
+                        </div>
+                        <input type="range" 
+                               id="portfolio-slider" 
+                               min="15" 
+                               max="40" 
+                               value="24.2" 
+                               step="0.1"
+                               class="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider">
+                    </div>
+                    <div class="text-xs text-white/50 text-center">Adjust share of total booked volume from top performers</div>
+                </div>
+                
+                <!-- Impact Metrics -->
+                <div class="space-y-3">
+                    <h4 class="text-sm font-semibold text-white">Projected Impact</h4>
+                    
+                    <!-- Top 25% Before/After -->
+                    <div class="bg-emerald-500/10 rounded-lg p-3 border border-emerald-400/20">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xs text-emerald-300 font-medium">TOP 25% CONTRIBUTION</span>
+                            <span id="top-change" class="text-xs text-emerald-400">+0%</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <div class="text-white/60">
+                                <span class="text-xs">Before:</span> <span id="top-before">Loading...</span>
+                            </div>
+                            <div class="text-emerald-400 font-medium">
+                                <span class="text-xs">After:</span> <span id="top-after">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- YTD %Ach (Constant) -->
+                    <div class="bg-blue-500/10 rounded-lg p-3 border border-blue-400/20">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xs text-blue-300 font-medium">YTD %ACH</span>
+                            <span id="ach-change" class="text-xs text-blue-400">+0%</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <div class="text-white/60">
+                                <span class="text-xs">Before:</span> <span id="ach-before">Loading...</span>
+                            </div>
+                            <div class="text-blue-400 font-medium">
+                                <span class="text-xs">After:</span> <span id="ach-after">Loading...</span>
+                            </div>
+                        </div>
+                    </div>                    <!-- Bottom 25% Before/After -->
+                    
+                    
+                    <!-- New YTD %Ach -->
+                    
+                </div>
+                
+                <!-- Reset Button -->
+                <button id="reset-scenario" class="w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm font-medium transition-all">
+                    Reset to Baseline
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- D3.js for chart implementation -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+        // Load and render the whale curve chart
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Regional Retention Dashboard loaded');
+            loadWhaleCurveChart();
+        });
+
+        async function loadWhaleCurveChart() {
+            try {
+                console.log('Loading Whale Curve chart data...');
+                const response = await fetch('/api/regional/whale-curve-data');
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Received whale curve data:', data);
+                
+                if (!data || data.length === 0) {
+                    document.getElementById('main-chart').innerHTML = 
+                        '<div class="flex items-center justify-center h-full text-white/50">No data available</div>';
+                    return;
+                }
+                
+                // Store original data for simulation purposes
+                originalWhaleCurveData = data;
+                
+                // Extract actual baseline values from real data
+                const totalEmployees = data.length;
+                // Derive individual booked shares from cumulative
+                const indivShares = data.map((d,i) => {
+                    const prev = i === 0 ? 0 : data[i-1].cum_booked_pct;
+                    return d.cum_booked_pct - prev; // decimal share
+                });
+                const topCount = Math.ceil(totalEmployees * 0.25);
+                const sortedShares = [...indivShares].sort((a,b)=> b-a);
+                // Compute bottom share from data; FORCE top baseline to 24.2%
+                const forcedBaselineTop = 24.2; // percent
+                const baselineBottomShare = sortedShares.slice(-topCount).reduce((s,v)=> s+v,0) * 100;
+                baselineValues.topShare = forcedBaselineTop;
+                baselineValues.bottomShare = baselineBottomShare;
+                baselineValues.ytdAch = 95.3; // force YTD baseline
+                baselineValues._lockedYtd = true;
+                // Fixed slider range 15% - 40%
+                const slider = document.getElementById('portfolio-slider');
+                const FIXED_MIN = 15.0;
+                const FIXED_MAX = 40.0;
+                slider.min = FIXED_MIN.toString();
+                slider.max = FIXED_MAX.toString();
+                slider.value = forcedBaselineTop.toFixed(1);
+                const minLabelEl = document.getElementById('slider-min-label');
+                const maxLabelEl = document.getElementById('slider-max-label');
+                if (minLabelEl) minLabelEl.textContent = FIXED_MIN.toFixed(0) + '%';
+                if (maxLabelEl) maxLabelEl.textContent = FIXED_MAX.toFixed(0) + '%';
+                const sliderValueEl = document.getElementById('slider-value');
+                if (sliderValueEl) sliderValueEl.textContent = forcedBaselineTop.toFixed(1) + '%';
+                updateBaselineDisplay();
+                // Precompute slope for YTD scaling: 95.3 -> 112 at topShare 35
+                window.__topShareYtdSlope = (112 - 95.3) / (35 - forcedBaselineTop);
+                console.log('Baseline values forced:', {
+                    topShare: forcedBaselineTop.toFixed(1) + '%',
+                    bottomShare: baselineBottomShare.toFixed(1) + '%',
+                    ytdAch: baselineValues.ytdAch.toFixed(1) + '%'
+                });
+                
+                renderWhaleCurveChart(data);
+            } catch (error) {
+                console.error('Error loading whale curve data:', error);
+                document.getElementById('main-chart').innerHTML = 
+                    `<div class="flex items-center justify-center h-full text-white/50">Error loading data: ${error.message}</div>`;
+            }
+        }
+
+        function renderWhaleCurveChart(data, simulationData = null) {
+            // Clear any existing chart
+            d3.select("#main-chart").selectAll("*").remove();
+            
+            // Set dimensions and margins
+            const margin = {top: 40, right: 80, bottom: 80, left: 70};
+            const width = document.getElementById('main-chart').offsetWidth - margin.left - margin.right;
+            const height = 384 - margin.top - margin.bottom; // h-96 = 384px
+            
+            // Create SVG
+            const svg = d3.select("#main-chart")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+            // Sort data by employee index to maintain order
+            data = data.sort((a, b) => a.index - b.index);
+            
+            console.log('Sorted whale curve data:', data);
+            
+            // Create scales
+            const xScale = d3.scaleBand()
+                .domain(data.map(d => d.employee))
+                .range([0, width])
+                .padding(0.1);
+            
+            // Create separate Y scales for left and right axes (convert to full percentages)
+            const yScaleLeft = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.pct_ach * 100) * 1.1])
+                .nice()
+                .range([height, 0]);
+            
+            const yScaleRight = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.cum_booked_pct * 100) * 1.1])
+                .nice()
+                .range([height, 0]);
+            
+            // Add X axis with completely vertical labels
+            svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("fill", "rgba(255,255,255,0.8)")
+                .style("font-size", "9px")
+                .attr("transform", "rotate(-90)")
+                .style("text-anchor", "end")
+                .attr("dx", "-0.8em")
+                .attr("dy", "0.2em");
+            
+            // Add left Y axis (%Ach)
+            svg.append("g")
+                .call(d3.axisLeft(yScaleLeft)
+                    .tickFormat(d => d + "%")
+                    .ticks(6))
+                .selectAll("text")
+                .style("fill", "#3b82f6") // Blue color to match %Ach line
+                .style("font-size", "11px");
+            
+            // Add right Y axis (Cum-Booked%)
+            svg.append("g")
+                .attr("transform", `translate(${width},0)`)
+                .call(d3.axisRight(yScaleRight)
+                    .tickFormat(d => d + "%")
+                    .ticks(6))
+                .selectAll("text")
+                .style("fill", "#ef4444") // Red color to match Cum-Booked% line
+                .style("font-size", "11px");
+            
+            // Style axis lines
+            svg.selectAll(".domain")
+                .style("stroke", "rgba(255,255,255,0.4)");
+            
+            svg.selectAll(".tick line")
+                .style("stroke", "rgba(255,255,255,0.2)");
+            
+            // Create line generators
+            const line1 = d3.line()
+                .x(d => xScale(d.employee) + xScale.bandwidth() / 2)
+                .y(d => yScaleLeft(d.pct_ach * 100))
+                .curve(d3.curveMonotoneX);
+            
+            const line2 = d3.line()
+                .x(d => xScale(d.employee) + xScale.bandwidth() / 2)
+                .y(d => yScaleRight(d.cum_booked_pct * 100))
+                .curve(d3.curveMonotoneX);
+            
+            // Add baseline %Ach line (faded if simulation exists)
+            svg.append("path")
+                .datum(data)
+                .attr("fill", "none")
+                .attr("stroke", "#3b82f6")
+                .attr("stroke-width", simulationData ? 2 : 3)
+                .attr("opacity", simulationData ? 0.4 : 1)
+                .attr("stroke-dasharray", simulationData ? "5,5" : "none")
+                .attr("d", line1)
+                .attr("class", "baseline-ach");
+            
+            // Add baseline Cum-Booked% line (faded if simulation exists)
+            svg.append("path")
+                .datum(data)
+                .attr("fill", "none")
+                .attr("stroke", "#ef4444")
+                .attr("stroke-width", simulationData ? 2 : 3)
+                .attr("opacity", simulationData ? 0.4 : 1)
+                .attr("stroke-dasharray", simulationData ? "5,5" : "none")
+                .attr("d", line2)
+                .attr("class", "baseline-cum");
+            
+            // Add simulation lines if data exists
+            if (simulationData && isWhatIfMode) {
+                const simLine1 = d3.line()
+                    .x(d => xScale(d.employee) + xScale.bandwidth() / 2)
+                    .y(d => yScaleLeft(d.pct_ach * 100))
+                    .curve(d3.curveMonotoneX);
+                
+                const simLine2 = d3.line()
+                    .x(d => xScale(d.employee) + xScale.bandwidth() / 2)
+                    .y(d => yScaleRight(d.cum_booked_pct * 100))
+                    .curve(d3.curveMonotoneX);
+                
+                // Simulation %Ach line (bold)
+                svg.append("path")
+                    .datum(simulationData)
+                    .attr("fill", "none")
+                    .attr("stroke", "#3b82f6")
+                    .attr("stroke-width", 4)
+                    .attr("opacity", 1)
+                    .attr("d", simLine1)
+                    .attr("class", "simulation-ach");
+                
+                // Simulation Cum-Booked% line (bold)
+                svg.append("path")
+                    .datum(simulationData)
+                    .attr("fill", "none")
+                    .attr("stroke", "#ef4444")
+                    .attr("stroke-width", 4)
+                    .attr("opacity", 1)
+                    .attr("d", simLine2)
+                    .attr("class", "simulation-cum");
+            }
+            
+            // Add legend
+            const legend = svg.append("g")
+                .attr("transform", `translate(${width - 140}, 20)`);
+            
+            let legendY = 0;
+            
+            if (simulationData && isWhatIfMode) {
+                // Baseline legend
+                legend.append("line")
+                    .attr("x1", 0).attr("y1", legendY)
+                    .attr("x2", 20).attr("y2", legendY)
+                    .attr("stroke", "#3b82f6")
+                    .attr("stroke-width", 2)
+                    .attr("opacity", 0.4)
+                    .attr("stroke-dasharray", "5,5");
+                
+                legend.append("text")
+                    .attr("x", 25).attr("y", legendY)
+                    .attr("dy", "0.35em")
+                    .style("fill", "rgba(255,255,255,0.6)")
+                    .style("font-size", "11px")
+                    .text("Baseline");
+                
+                legendY += 20;
+                
+                // Simulation legend
+                legend.append("line")
+                    .attr("x1", 0).attr("y1", legendY)
+                    .attr("x2", 20).attr("y2", legendY)
+                    .attr("stroke", "#3b82f6")
+                    .attr("stroke-width", 4);
+                
+                legend.append("text")
+                    .attr("x", 25).attr("y", legendY)
+                    .attr("dy", "0.35em")
+                    .style("fill", "rgba(255,255,255,0.9)")
+                    .style("font-size", "11px")
+                    .text("Simulation");
+                
+                legendY += 30;
+            }
+            
+            // %Ach legend item
+            legend.append("line")
+                .attr("x1", 0).attr("y1", legendY)
+                .attr("x2", 20).attr("y2", legendY)
+                .attr("stroke", "#3b82f6")
+                .attr("stroke-width", 3);
+            
+            legend.append("text")
+                .attr("x", 25).attr("y", legendY)
+                .attr("dy", "0.35em")
+                .style("fill", "rgba(255,255,255,0.9)")
+                .style("font-size", "12px")
+                .text("%Ach");
+            
+            legendY += 20;
+            
+            // Cum-Booked% legend item
+            legend.append("line")
+                .attr("x1", 0).attr("y1", legendY)
+                .attr("x2", 20).attr("y2", legendY)
+                .attr("stroke", "#ef4444")
+                .attr("stroke-width", 3);
+            
+            legend.append("text")
+                .attr("x", 25).attr("y", legendY)
+                .attr("dy", "0.35em")
+                .style("fill", "rgba(255,255,255,0.9)")
+                .style("font-size", "12px")
+                .text("Cum-Booked%");
+            
+            // Add Y-axis labels
+            svg.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left + 20)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .style("fill", "#3b82f6")
+                .style("font-size", "12px")
+                .style("font-weight", "600")
+                .text("YTD - %Ach");
+            
+            svg.append("text")
+                .attr("transform", "rotate(90)")
+                .attr("y", 0 - width - margin.right + 20)
+                .attr("x", height / 2)
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .style("fill", "#ef4444")
+                .style("font-size", "12px")
+                .style("font-weight", "600")
+                .text("Cum-Booked%");
+            
+            // Add tooltips
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "whale-curve-tooltip")
+                .style("opacity", 0)
+                .style("position", "absolute")
+                .style("background", "rgba(0,0,0,0.9)")
+                .style("color", "white")
+                .style("padding", "10px")
+                .style("border-radius", "6px")
+                .style("font-size", "12px")
+                .style("pointer-events", "none")
+                .style("z-index", "1000")
+                .style("box-shadow", "0 4px 6px rgba(0,0,0,0.3)");
+            
+            // Add interactive overlay for tooltips
+            svg.selectAll(".overlay")
+                .data(data)
+                .enter().append("rect")
+                .attr("class", "overlay")
+                .attr("x", d => xScale(d.employee))
+                .attr("width", xScale.bandwidth())
+                .attr("y", 0)
+                .attr("height", height)
+                .attr("fill", "transparent")
+                .on("mouseover", function(event, d) {
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", .95);
+                    
+                    let tooltipContent = `
+                        <div style="border-bottom: 1px solid rgba(255,255,255,0.3); margin-bottom: 6px; padding-bottom: 4px;">
+                            <strong>${d.employee}</strong>
+                        </div>
+                        <div style="color: #3b82f6; margin-bottom: 3px;">
+                            <strong>%Ach:</strong> ${(d.pct_ach * 100).toFixed(1)}%
+                        </div>
+                        <div style="color: #ef4444;">
+                            <strong>Cum-Booked%:</strong> ${(d.cum_booked_pct * 100).toFixed(1)}%
+                        </div>`;
+                    
+                    if (simulationData && isWhatIfMode) {
+                        const simPoint = simulationData.find(s => s.employee === d.employee);
+                        if (simPoint) {
+                            tooltipContent += `
+                                <div style="border-top: 1px solid rgba(255,255,255,0.2); margin-top: 6px; padding-top: 4px;">
+                                    <div style="color: #3b82f6; margin-bottom: 3px;">
+                                        <strong>Sim %Ach:</strong> ${(simPoint.pct_ach * 100).toFixed(1)}%
+                                    </div>
+                                    <div style="color: #ef4444;">
+                                        <strong>Sim Cum-Booked%:</strong> ${(simPoint.cum_booked_pct * 100).toFixed(1)}%
+                                    </div>
+                                </div>`;
+                        }
+                    }
+                    
+                    tooltip.html(tooltipContent)
+                        .style("left", (event.pageX + 15) + "px")
+                        .style("top", (event.pageY - 10) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.transition()
+                        .duration(300)
+                        .style("opacity", 0);
+                });
+        }
+    </script>
+
+    <!-- What-If Lab Mode Toggle Functionality -->
+    <script>
+        // What-If Lab functionality for Regional Retention Dashboard
+        let isWhatIfMode = false;
+        let originalWhaleCurveData = null;
+        let currentSimulationData = null;
+        
+        let baselineValues = {
+            topGwp: '12M',
+            topTenure: '1.2',
+            topRr: '90%',
+            bottomGwp: '22M',
+            bottomTenure: '2.3',
+            bottomRr: '65%',
+            topShare: 75.0,      // Top 25% contributes 75% of total booked volume (realistic)
+            bottomShare: 25.0,   // Bottom 25% contributes 25% of total booked volume
+            ytdAch: 95.3         // Current actual YTD %Ach from your data
+        };
+        let currentScenario = {...baselineValues};
+
+                // Scenario Calculation Functions
+        function calculateScenarioImpact(newTopShare) {
+            if (!originalWhaleCurveData) return null;
+            const sliderEl = document.getElementById('portfolio-slider');
+            const minV = parseFloat(sliderEl.min);
+            const maxV = parseFloat(sliderEl.max);
+            const baselineTop = baselineValues.topShare; // percent
+            const baselineBottom = baselineValues.bottomShare; // percent
+            const clamped = Math.min(maxV, Math.max(minV, newTopShare));
+            // Symmetric adjustment: assume shift only affects remainder proportionally
+            const newBottomShare = baselineBottom + (baselineTop - clamped);
+            // Dynamic YTD scaling (linear)
+            const slope = window.__topShareYtdSlope || 0;
+            let newYtd = baselineValues.ytdAch + slope * (clamped - baselineTop);
+            // Optional bounds
+            newYtd = Math.max(0, newYtd);
+            return {
+                topShare: clamped,
+                bottomShare: newBottomShare,
+                ytdAch: newYtd,
+                topChange: ((clamped - baselineTop) / baselineTop) * 100,
+                bottomChange: baselineBottom ? ((newBottomShare - baselineBottom) / baselineBottom) * 100 : 0,
+                achChange: ((newYtd - baselineValues.ytdAch) / baselineValues.ytdAch) * 100
+            };
+        }
+        
+        function generateSimulationData(originalData, scenario) {
+            if (!originalData) return null;
+            const total = originalData.length;
+            const topCount = Math.ceil(total * 0.25);
+            const baselineCum = originalData.map(d => d.cum_booked_pct * 100);
+            const currentTopShare = baselineCum[topCount - 1];
+            const targetTopShare = scenario.topShare;
+            if (!currentTopShare) return originalData;
+            const scale = targetTopShare / currentTopShare;
+            const baseRemaining = 100 - currentTopShare;
+            const targetRemaining = 100 - targetTopShare;
+            return originalData.map((d, i) => {
+                let newCum;
+                if (i < topCount) {
+                    newCum = baselineCum[i] * scale;
+                } else {
+                    const delta = baselineCum[i] - currentTopShare;
+                    const norm = baseRemaining > 0 ? delta / baseRemaining : 0;
+                    newCum = targetTopShare + norm * targetRemaining;
+                }
+                // Monotonic enforce
+                if (i > 0) newCum = Math.max(newCum, (baselineCum[i-1] < newCum ? newCum : newCum));
+                return { ...d, pct_ach: d.pct_ach, cum_booked_pct: Math.min(100, newCum) / 100 };
+            });
+        }
+        
+        function updateScenarioMetrics(scenario) {
+            document.getElementById('slider-value').textContent = scenario.topShare.toFixed(1) + '%';
+            const slider = document.getElementById('portfolio-slider');
+            const sliderMin = parseFloat(slider.min);
+            const sliderMax = parseFloat(slider.max);
+            const percentage = (scenario.topShare - sliderMin) / (sliderMax - sliderMin) * 100;
+            slider.style.background = `linear-gradient(to right, rgba(59, 130, 246, 0.3) 0%, rgba(59, 130, 246, 0.3) ${percentage}%, rgba(255,255,255,0.2) ${percentage}%, rgba(255,255,255,0.2) 100%)`;
+            const currentTopShare = baselineValues.topShare;
+            const currentBottomShare = baselineValues.bottomShare;
+            document.getElementById('top-before').textContent = currentTopShare.toFixed(1) + '%';
+            document.getElementById('top-after').textContent = scenario.topShare.toFixed(1) + '%';
+            document.getElementById('top-change').textContent = (scenario.topChange>=0?'+':'') + scenario.topChange.toFixed(1) + '%';
+            document.getElementById('top-change').className = `text-xs ${scenario.topChange >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+            // Bottom metrics may be removed
+            const bottomBeforeEl = document.getElementById('bottom-before');
+            const bottomAfterEl = document.getElementById('bottom-after');
+            const bottomChangeEl = document.getElementById('bottom-change');
+            if (bottomBeforeEl && bottomAfterEl && bottomChangeEl) {
+                bottomBeforeEl.textContent = currentBottomShare.toFixed(1) + '%';
+                bottomAfterEl.textContent = scenario.bottomShare.toFixed(1) + '%';
+                bottomChangeEl.textContent = (scenario.bottomChange>=0?'+':'') + scenario.bottomChange.toFixed(1) + '%';
+                bottomChangeEl.className = `text-xs ${scenario.bottomChange >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+            }
+            document.getElementById('ach-before').textContent = baselineValues.ytdAch.toFixed(1) + '%';
+            document.getElementById('ach-after').textContent = scenario.ytdAch.toFixed(1) + '%';
+            document.getElementById('ach-change').textContent = (scenario.achChange>=0?'+':'') + scenario.achChange.toFixed(1) + '%';
+            document.getElementById('ach-change').className = `text-xs ${scenario.achChange >= 0 ? 'text-blue-400' : 'text-red-400'}`;
+            if (originalWhaleCurveData && isWhatIfMode) {
+                currentSimulationData = generateSimulationData(originalWhaleCurveData, scenario);
+                renderWhaleCurveChart(originalWhaleCurveData, currentSimulationData);
+            }
+        }
+        
+        function updateBaselineDisplay() {
+            // Use forced baselines
+            document.getElementById('top-before').textContent = baselineValues.topShare.toFixed(1) + '%';
+            document.getElementById('top-after').textContent = baselineValues.topShare.toFixed(1) + '%';
+            document.getElementById('top-change').textContent = '+0.0%';
+            const bottomBeforeEl = document.getElementById('bottom-before');
+            const bottomAfterEl = document.getElementById('bottom-after');
+            const bottomChangeEl = document.getElementById('bottom-change');
+            if (bottomBeforeEl && bottomAfterEl && bottomChangeEl) {
+                bottomBeforeEl.textContent = baselineValues.bottomShare.toFixed(1) + '%';
+                bottomAfterEl.textContent = baselineValues.bottomShare.toFixed(1) + '%';
+                bottomChangeEl.textContent = '+0.0%';
+            }
+            document.getElementById('ach-before').textContent = baselineValues.ytdAch.toFixed(1) + '%';
+            document.getElementById('ach-after').textContent = baselineValues.ytdAch.toFixed(1) + '%';
+            document.getElementById('ach-change').textContent = '+0.0%';
+        }
+
+        // Mode Toggle Functions
+        function switchToLiveMode() {
+            isWhatIfMode = false;
+            document.getElementById('live-mode').classList.add('bg-white/20', 'font-medium');
+            document.getElementById('live-mode').classList.remove('text-white/70');
+            document.getElementById('whatif-mode').classList.remove('bg-white/20', 'font-medium');
+            document.getElementById('whatif-mode').classList.add('text-white/70');
+            
+            // Hide scenario panel
+            document.getElementById('scenario-panel').classList.add('hidden');
+            document.getElementById('scenario-panel').classList.add('translate-x-full');
+            
+            // Reset dashboard container to original full size
+            const container = document.querySelector('.container');
+            container.style.marginRight = 'auto';
+            container.style.marginLeft = 'auto';
+            container.style.transform = 'none';
+            container.style.transformOrigin = 'center center';
+            container.style.transition = 'all 0.3s ease-in-out';
+            container.style.width = 'auto';
+            container.style.maxWidth = 'none';
+            
+            // Remove faded effect from dashboard
+            document.getElementById('dashboard-content').classList.remove('opacity-40');
+            document.querySelectorAll('.dashboard-section').forEach(section => {
+                section.classList.remove('opacity-40');
+            });
+            
+            // Reset to baseline values
+            resetScenarioValues();
+            
+            // Reset dashboard cards to original styling when leaving What-If mode
+            resetDashboardCardsToOriginal();
+            
+            // Re-render chart without simulation data
+            if (originalWhaleCurveData) {
+                renderWhaleCurveChart(originalWhaleCurveData, null);
+            }
+        }
+
+        function switchToWhatIfMode() {
+            isWhatIfMode = true;
+            document.getElementById('whatif-mode').classList.add('bg-white/20', 'font-medium');
+            document.getElementById('whatif-mode').classList.remove('text-white/70');
+            document.getElementById('live-mode').classList.remove('bg-white/20', 'font-medium');
+            document.getElementById('live-mode').classList.add('text-white/70');
+            
+            // Show scenario panel
+            document.getElementById('scenario-panel').classList.remove('hidden');
+            document.getElementById('scenario-panel').classList.remove('translate-x-full');
+            
+            // Scale down dashboard more conservatively to avoid affecting chart size/labels
+            const container = document.querySelector('.container');
+            const panelWidth = 320; // Actual panel width
+            
+            // More conservative scaling - just add margin without aggressive scaling
+            container.style.marginRight = `${panelWidth + 20}px`;
+            container.style.marginLeft = '0';
+            container.style.transform = 'scale(0.9)'; // Minimal scaling
+            container.style.transformOrigin = 'left center';
+            container.style.transition = 'all 0.3s ease-in-out';
+            
+            // Keep dashboard fully visible (no fading)
+            document.getElementById('dashboard-content').classList.remove('opacity-40');
+            document.querySelectorAll('.dashboard-section').forEach(section => {
+                section.classList.remove('opacity-40');
+            });
+            
+            // Initialize scenario if we have data
+            if (originalWhaleCurveData) {
+                const scenario = calculateScenarioImpact(currentScenario.topShare);
+                updateScenarioMetrics(scenario);
+            }
+        }
+
+        function resetScenarioValues() {
+            currentScenario = {...baselineValues};
+            currentSimulationData = null;
+            
+            // Reset slider
+            document.getElementById('portfolio-slider').value = baselineValues.topShare;
+            
+            // Reset metrics display
+            if (isWhatIfMode) {
+                const scenario = calculateScenarioImpact(baselineValues.topShare);
+                updateScenarioMetrics(scenario);
+            }
+            
+            // Reset dashboard cards to original styling
+            resetDashboardCardsToOriginal();
+        }
+        
+        function resetDashboardCardsToOriginal() {
+            const cards = {
+                'top-gwp': baselineValues.topGwp + 'M SAR',
+                'top-tenure': baselineValues.topTenure + ' Years', 
+                'top-rr': baselineValues.topRr,
+                'bottom-gwp': baselineValues.bottomGwp + 'M SAR',
+                'bottom-tenure': baselineValues.bottomTenure + ' Years',
+                'bottom-rr': baselineValues.bottomRr
+            };
+            
+            Object.entries(cards).forEach(([cardId, originalValue]) => {
+                const cardElement = document.querySelector(`[data-card="${cardId}"]`);
+                if (cardElement) {
+                    // Extract just the value part, keeping the span structure for units
+                    const parts = originalValue.split(' ');
+                    if (parts.length >= 2 && parts[1] === 'SAR') {
+                        cardElement.innerHTML = `${parts[0]} <span class="text-lg">${parts.slice(1).join(' ')}</span>`;
+                    } else if (parts.length >= 2 && parts[1] === 'Years') {
+                        cardElement.innerHTML = `${parts[0]} <span class="text-lg">${parts.slice(1).join(' ')}</span>`;
+                    } else {
+                        cardElement.innerHTML = originalValue;
+                    }
+                    cardElement.className = cardElement.className.replace(/text-(green|red)-400/g, 
+                        cardId.startsWith('top-') ? 'text-emerald-400' : 'text-red-400');
+                }
+            });
+        }
+        
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Mode toggle events
+            document.getElementById('live-mode').addEventListener('click', switchToLiveMode);
+            document.getElementById('whatif-mode').addEventListener('click', switchToWhatIfMode);
+            document.getElementById('close-panel').addEventListener('click', switchToLiveMode);
+            
+            // Scenario control events
+            document.getElementById('portfolio-slider').addEventListener('input', function(e) {
+                if (!isWhatIfMode) return;
+                const val = parseFloat(e.target.value);
+                if (isNaN(val)) return;
+                const scenario = calculateScenarioImpact(val);
+                currentScenario.topShare = scenario.topShare;
+                updateScenarioMetrics(scenario);
+            });
+            
+            document.getElementById('reset-scenario').addEventListener('click', resetScenarioValues);
+            
+            // Window resize handler to maintain proper scaling
+            window.addEventListener('resize', function() {
+                if (isWhatIfMode) {
+                    const container = document.querySelector('.container');
+                    container.style.marginRight = '340px';
+                    container.style.transform = 'scale(0.9)';
+                    container.style.transformOrigin = 'left center';
+                } else {
+                    const container = document.querySelector('.container');
+                    container.style.marginRight = 'auto';
+                    container.style.marginLeft = 'auto';
+                    container.style.transform = 'none';
+                    container.style.width = 'auto';
+                    container.style.maxWidth = 'none';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
