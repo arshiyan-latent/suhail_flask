@@ -2078,4 +2078,4 @@ if __name__ == '__main__':
                 conn.commit()
                 print("Added manager_id column to user table")
         db.create_all()
-    app.run(host='0.0.0.0', port=5002, debug=True)
+    app.run(host='0.0.0.0', port=5002, debug=True, ssl_context=('ssl_keys/cert.pem', 'ssl_keys/key.pem'))
