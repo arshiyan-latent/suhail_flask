@@ -108,12 +108,27 @@ class Transcript(db.Model):
     chat_id = db.Column(db.String, db.ForeignKey('chat_sessions.id'), nullable=True)
     title = db.Column(db.String(255), nullable=False, default='Untitled Meeting')
     text = db.Column(db.Text, nullable=False)
+    meeting_summary = db.Column(db.Text, nullable=True)    # Structured meeting summary from Suhail Summary Agent
     created_at = db.Column(db.DateTime, default=db.func.now())
 
-    # NEW (optional)
-    file_path = db.Column(db.String, nullable=True)
+    # File paths for both audio and PDF
+    audio_file_path = db.Column(db.String, nullable=True)  # Path to original audio file
+    file_path = db.Column(db.String, nullable=True)        # Path to PDF transcript
     speakers_count = db.Column(db.Integer, nullable=True)
     language = db.Column(db.String(16), nullable=True)
+    duration = db.Column(db.Float, nullable=True)          # Audio duration in seconds
 
     user = db.relationship('User', backref='transcripts')
     chat = db.relationship('ChatSession', backref='transcripts')
+
+class MeetingThreadMessage(db.Model):
+    __tablename__ = 'meeting_thread_messages'
+    id = db.Column(db.Integer, primary_key=True)
+    transcript_id = db.Column(db.Integer, db.ForeignKey('transcript.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    sender = db.Column(db.String(20), nullable=False)  # 'user' or 'assistant'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    transcript = db.relationship('Transcript', backref=db.backref('thread_messages', lazy=True))
+    user = db.relationship('User', backref=db.backref('meeting_threads', lazy=True))

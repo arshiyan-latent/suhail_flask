@@ -2,10 +2,11 @@
 from webbrowser import get
 from agents.agent import llm, get_supervisor_for_user
 from agents.summary.summary_agent import extract_transcript, generate_summary
+from agents.summary.transcript_summary import generate_meeting_summary
 from agents.manager_agent import create_manager_agent
 from agents.general_agent import supervisor_agent_general
 from dotenv import load_dotenv
-import os, tempfile, time, json, subprocess, uuid, traceback, io, re
+import os, tempfile, time, json, subprocess, uuid, traceback, io, re, shutil
 # import logging
 from langchain_openai import ChatOpenAI
 from pathlib import Path
@@ -604,6 +605,130 @@ def manage_users():
     return render_template('admin_users.html', users=users)
 
 
+@app.route("/v1/chat", methods=['POST'])
+@login_required
+def chat():
+    data = request.json
+    chat_id = data.get('chat_id')
+    transcript_id = data.get('transcript_id')
+    user_message = data.get('message', '')
+    meeting_context = data.get('meeting_context', '')
+    is_meeting_thread = data.get('is_meeting_thread', False)
+    
+    if not user_message:
+        return jsonify({"error": "Message is required"}), 400
+    
+    try:
+        # For meeting threads, create a specialized prompt
+        if is_meeting_thread and meeting_context:
+            system_prompt = f"""You are Suhail, an expert business consultant and meeting analyst. You're helping the user understand and discuss a specific meeting.
+
+MEETING CONTEXT:
+{meeting_context}
+
+Instructions:
+- Answer questions specifically about this meeting
+- Reference specific details from the meeting summary
+- Provide insights, clarifications, and follow-up suggestions
+- Be conversational and helpful
+- If asked about something not in the meeting, politely redirect to meeting content
+
+User Question: {user_message}"""
+        else:
+            # Regular chat - use default behavior
+            system_prompt = f"You are Suhail, a helpful AI assistant. Please respond to: {user_message}"
+        
+        # Call OpenAI API
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            max_tokens=1000,
+            temperature=0.7
+        )
+        
+        ai_response = response.choices[0].message.content
+        
+        # Save thread messages to database if transcript_id is provided
+        if transcript_id and is_meeting_thread:
+            from models import MeetingThreadMessage
+            
+            # Save user message
+            user_msg = MeetingThreadMessage(
+                transcript_id=transcript_id,
+                user_id=current_user.id,
+                message=user_message,
+                sender='user'
+            )
+            db.session.add(user_msg)
+            
+            # Save AI response
+            ai_msg = MeetingThreadMessage(
+                transcript_id=transcript_id,
+                user_id=current_user.id,
+                message=ai_response,
+                sender='assistant'
+            )
+            db.session.add(ai_msg)
+            db.session.commit()
+        
+        # Save regular chat messages to database if chat_id is provided
+        elif chat_id:
+            # Save user message
+            user_msg = ChatMessage(
+                session_id=chat_id,
+                user_id=current_user.id,
+                message=user_message,
+                sender='user'
+            )
+            db.session.add(user_msg)
+            
+            # Save AI response
+            ai_msg = ChatMessage(
+                session_id=chat_id,
+                user_id=current_user.id,
+                message=ai_response,
+                sender='assistant'
+            )
+            db.session.add(ai_msg)
+            db.session.commit()
+        
+        return jsonify({"response": ai_response})
+        
+    except Exception as e:
+        print(f"Chat error: {str(e)}")
+        return jsonify({"error": "Failed to generate response"}), 500
+
+
+@app.route("/v1/meeting/<int:transcript_id>/thread", methods=['GET'])
+@login_required
+def get_meeting_thread(transcript_id):
+    """Get all thread messages for a specific meeting"""
+    try:
+        from models import MeetingThreadMessage
+        
+        messages = MeetingThreadMessage.query.filter_by(
+            transcript_id=transcript_id,
+            user_id=current_user.id
+        ).order_by(MeetingThreadMessage.created_at).all()
+        
+        thread_data = []
+        for msg in messages:
+            thread_data.append({
+                'message': msg.message,
+                'sender': msg.sender,
+                'created_at': msg.created_at.isoformat()
+            })
+        
+        return jsonify({"messages": thread_data})
+        
+    except Exception as e:
+        print(f"Error loading thread: {str(e)}")
+        return jsonify({"error": "Failed to load thread"}), 500
+
+
 @app.route("/v1/chat/agent", methods=['POST'])
 @login_required
 def agent_chat():
@@ -840,16 +965,43 @@ def load_chat(chat_id):
     if not session:
         return jsonify({'error': 'Chat session not found'}), 404
 
+    # Get messages and transcripts, then merge and sort by timestamp
     messages = ChatMessage.query.filter_by(session_id=chat_id).order_by(ChatMessage.timestamp).all()
+    transcripts = Transcript.query.filter_by(chat_id=chat_id, user_id=current_user.id).order_by(Transcript.created_at).all()
     
-    return jsonify([
-        {
+    # Combine messages and transcripts into a single timeline
+    timeline = []
+    
+    # Add regular messages
+    for m in messages:
+        timeline.append({
+            'type': 'message',
             'content': m.message,
             'role': 'user' if m.sender == 'user' else 'bot',
             'timestamp': m.timestamp.isoformat()
-        }
-        for m in messages
-    ])
+        })
+    
+    # Add transcripts as special message types
+    for t in transcripts:
+        timeline.append({
+            'type': 'transcript',
+            'transcript_id': t.id,
+            'title': t.title,
+            'content': t.text,
+            'meeting_summary': t.meeting_summary,  # Include the meeting summary
+            'role': 'transcript',
+            'timestamp': t.created_at.isoformat(),
+            'audio_url': url_for('download_audio', transcript_id=t.id) if t.audio_file_path else None,
+            'pdf_url': url_for('download_transcript', transcript_id=t.id) if t.file_path else None,
+            'speakers': t.speakers_count,
+            'duration': t.duration,
+            'language': t.language
+        })
+    
+    # Sort combined timeline by timestamp
+    timeline.sort(key=lambda x: x['timestamp'])
+    
+    return jsonify(timeline)
 
 @app.route('/v1/chat/renamechat', methods=['POST'])
 @login_required
@@ -930,17 +1082,40 @@ def get_chat_summary():
 def transcribe_audio():
     try:
         title = request.form.get('title', 'Live Meeting')
+        chat_id = request.form.get('chat_id')  # Optional chat_id to associate with conversation
 
         if 'audio' not in request.files:
             return jsonify({'error': 'No audio file provided'}), 400
 
-        audio_file = request.files['audio']
-        filename = secure_filename(audio_file.filename or 'meeting.webm')
+        # Validate chat_id if provided
+        if chat_id:
+            chat_session = ChatSession.query.filter_by(id=chat_id, user_id=current_user.id).first()
+            if not chat_session:
+                return jsonify({'error': 'Chat session not found or access denied'}), 404
 
-        # Save to temp
+        audio_file = request.files['audio']
+        filename = secure_filename(audio_file.filename or 'recording.webm')
+
+        # Create directories for storing audio files
+        audio_base_dir = Path("uploads") / "audio" / str(current_user.id)
+        transcript_base_dir = Path("uploads") / "transcripts" / str(current_user.id)
+        audio_base_dir.mkdir(parents=True, exist_ok=True)
+        transcript_base_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save original audio file
+        stamp = int(time.time())
+        safe_title = "".join(c for c in title if c.isalnum() or c in (" ", "_", "-")).rstrip() or "recording"
+        audio_filename = f"{stamp}_{safe_title}_{filename}"
+        audio_path = audio_base_dir / audio_filename
+
+        audio_file.save(str(audio_path))
+
+        # Save to temp for transcription
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp:
             tmp_path = tmp.name
-            audio_file.save(tmp_path)
+            # Copy the saved audio file to temp location for processing
+            import shutil
+            shutil.copy2(str(audio_path), tmp_path)
 
         # Choose model & response format
         model_name = os.getenv("STT_MODEL", "whisper-1")
@@ -958,6 +1133,8 @@ def transcribe_audio():
         # Parse via dict
         rd = resp.model_dump() if hasattr(resp, "model_dump") else {}
         segments = []
+        duration = None
+
         if use_verbose and isinstance(rd.get("segments"), list):
             for s in rd["segments"]:
                 segments.append({
@@ -965,6 +1142,9 @@ def transcribe_audio():
                     "end": float(s.get("end") or 0.0),
                     "text": (s.get("text") or "").strip()
                 })
+            # Get duration from the last segment if available
+            if segments:
+                duration = max(seg["end"] for seg in segments)
         else:
             text = (rd.get("text") or "").strip()
             segments = [{"start": 0.0, "end": 0.0, "text": text}]
@@ -997,11 +1177,7 @@ def transcribe_audio():
         pretty_text = "\n".join(lines).strip()
 
         # Save PDF
-        base_dir = Path("uploads") / "transcripts" / str(current_user.id)
-        base_dir.mkdir(parents=True, exist_ok=True)
-        stamp = int(time.time())
-        safe_title = "".join(c for c in title if c.isalnum() or c in (" ", "_", "-")).rstrip() or "meeting"
-        pdf_path = base_dir / f"{stamp}_{safe_title}.pdf"
+        pdf_path = transcript_base_dir / f"{stamp}_{safe_title}.pdf"
 
         write_transcript_pdf(
             str(pdf_path),
@@ -1010,34 +1186,76 @@ def transcribe_audio():
             meta={"Model": model_name, "Speakers": str(num_speakers)}
         )
 
-        # DB row (store preview text & file path)
+        # DB row (store both audio and transcript paths, and link to chat if provided)
         transcript = Transcript(
             user_id=current_user.id,
-            chat_id=None,
+            chat_id=chat_id,  # This will be None if not provided, or the actual chat_id
             title=title,
-            text=pretty_text  # used for sidebar preview
+            text=pretty_text,  # used for sidebar preview and inline display
+            audio_file_path=str(audio_path),  # Store path to original audio file
+            file_path=str(pdf_path),          # Store path to PDF transcript
+            speakers_count=num_speakers,
+            duration=duration
         )
-        try:
-            transcript.file_path = str(pdf_path)
-            transcript.speakers_count = num_speakers
+        
+        # Set language if available
+        if rd.get("language"):
             transcript.language = rd.get("language")
-        except Exception:
-            pass
 
         db.session.add(transcript)
         db.session.commit()
 
-        # Cleanup temp
-        try: os.remove(tmp_path)
-        except Exception: pass
+        # Generate meeting summary using Suhail Summary Agent
+        try:
+            print(f"[DEBUG] Starting meeting summary generation for transcript {transcript.id}")
+            meeting_metadata = {
+                'customer_name': '[Customer Name Not Specified]',  # Can be enhanced later with client detection
+                'title': title,
+                'duration': f"{int(duration//60)}:{int(duration%60):02d}" if duration else 'Unknown',
+                'participants': f"{num_speakers} speaker{'s' if num_speakers != 1 else ''}",
+                'date_time': transcript.created_at.strftime('%d/%m/%Y, %H:%M'),
+                'recording_link': url_for('download_audio', transcript_id=transcript.id)
+            }
+            
+            print(f"[DEBUG] Meeting metadata: {meeting_metadata}")
+            print(f"[DEBUG] Transcript text length: {len(pretty_text)}")
+            
+            # Generate the structured meeting summary
+            meeting_summary = generate_meeting_summary(pretty_text, meeting_metadata)
+            print(f"[DEBUG] Generated meeting summary length: {len(meeting_summary) if meeting_summary else 0}")
+            
+            # Update the transcript with the meeting summary
+            transcript.meeting_summary = meeting_summary
+            db.session.commit()
+            print(f"[DEBUG] Successfully saved meeting summary to database")
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to generate meeting summary: {str(e)}")
+            traceback.print_exc()
+            # Continue without meeting summary if there's an error
+            meeting_summary = None
 
-        return jsonify({
+        # Cleanup temp
+        try: 
+            os.remove(tmp_path)
+        except Exception: 
+            pass
+
+        response_data = {
             "success": True,
             "transcript_id": transcript.id,
             "title": title,
+            "text": pretty_text,
+            "meeting_summary": meeting_summary if meeting_summary else None,  # Handle None case
             "file_url": url_for('download_transcript', transcript_id=transcript.id),
-            "speakers": num_speakers
-        })
+            "audio_url": url_for('download_audio', transcript_id=transcript.id),
+            "speakers": num_speakers,
+            "duration": duration,
+            "chat_id": chat_id,
+            "created_at": transcript.created_at.isoformat()
+        }
+
+        return jsonify(response_data)
 
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -1047,16 +1265,30 @@ def transcribe_audio():
 @app.route('/v1/transcripts', methods=['GET'])
 @login_required
 def list_transcripts():
-    rows = Transcript.query.filter_by(user_id=current_user.id).order_by(Transcript.created_at.desc()).all()
+    chat_id = request.args.get('chat_id')  # Optional filter by chat_id
+    
+    if chat_id:
+        # Get transcripts for specific chat
+        rows = Transcript.query.filter_by(user_id=current_user.id, chat_id=chat_id).order_by(Transcript.created_at.desc()).all()
+    else:
+        # Get all transcripts for user (original behavior)
+        rows = Transcript.query.filter_by(user_id=current_user.id).order_by(Transcript.created_at.desc()).all()
+    
     out = []
     for t in rows:
-        out.append({
+        transcript_data = {
             "id": t.id,
             "title": t.title,
             "created_at": t.created_at.isoformat(),
             "preview": (t.text[:200] + '...') if len(t.text) > 200 else t.text,
-            "file_url": url_for('download_transcript', transcript_id=t.id)
-        })
+            "file_url": url_for('download_transcript', transcript_id=t.id) if t.file_path else None,
+            "audio_url": url_for('download_audio', transcript_id=t.id) if t.audio_file_path else None,
+            "chat_id": t.chat_id,
+            "speakers": t.speakers_count,
+            "duration": t.duration,
+            "language": t.language
+        }
+        out.append(transcript_data)
     return jsonify(out)
 
 @app.route('/v1/transcripts/<int:transcript_id>/download', methods=['GET'])
@@ -1067,21 +1299,60 @@ def download_transcript(transcript_id):
         return jsonify({"error": "Not found"}), 404
     return send_file(t.file_path, as_attachment=True, download_name=os.path.basename(t.file_path))
 
+@app.route('/v1/transcripts/<int:transcript_id>/audio', methods=['GET'])
+@login_required
+def download_audio(transcript_id):
+    t = Transcript.query.filter_by(id=transcript_id, user_id=current_user.id).first()
+    if not t or not t.audio_file_path or not os.path.exists(t.audio_file_path):
+        return jsonify({"error": "Audio file not found"}), 404
+    return send_file(t.audio_file_path, as_attachment=False)  # Stream for playback
+
 @app.route('/v1/transcripts/<int:transcript_id>', methods=['DELETE'])
 @login_required
 def delete_transcript(transcript_id):
     t = Transcript.query.filter_by(id=transcript_id, user_id=current_user.id).first()
     if not t:
         return jsonify({"error": "Not found"}), 404
-    # remove file
+    # remove files
     try:
         if t.file_path and os.path.exists(t.file_path):
             os.remove(t.file_path)
+        if t.audio_file_path and os.path.exists(t.audio_file_path):
+            os.remove(t.audio_file_path)
     except Exception as e:
         print("file delete warning:", e)
     db.session.delete(t)
     db.session.commit()
     return jsonify({"success": True})
+
+@app.route('/v1/transcripts/<int:transcript_id>/update', methods=['PUT'])
+@login_required
+def update_transcript(transcript_id):
+    t = Transcript.query.filter_by(id=transcript_id, user_id=current_user.id).first()
+    if not t:
+        return jsonify({"error": "Transcript not found"}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    
+    # Update allowed fields
+    if 'text' in data:
+        t.text = data['text']
+    if 'title' in data:
+        t.title = data['title']
+    if 'meeting_summary' in data:
+        t.meeting_summary = data['meeting_summary']
+    
+    db.session.commit()
+    
+    return jsonify({
+        "success": True,
+        "transcript_id": t.id,
+        "title": t.title,
+        "text": t.text,
+        "meeting_summary": t.meeting_summary
+    })
 
 @app.route('/v1/chat/report', methods=['POST'])
 @login_required
@@ -2077,5 +2348,23 @@ if __name__ == '__main__':
                 conn.execute(db.text("ALTER TABLE user ADD COLUMN manager_id INTEGER"))
                 conn.commit()
                 print("Added manager_id column to user table")
+        
+        # Check if we need to add new transcript columns
+        transcript_columns = [column['name'] for column in inspector.get_columns('transcript')]
+        
+        if 'audio_file_path' not in transcript_columns:
+            # Add the audio_file_path column to existing database
+            with db.engine.connect() as conn:
+                conn.execute(db.text("ALTER TABLE transcript ADD COLUMN audio_file_path VARCHAR"))
+                conn.commit()
+                print("Added audio_file_path column to transcript table")
+        
+        if 'duration' not in transcript_columns:
+            # Add the duration column to existing database
+            with db.engine.connect() as conn:
+                conn.execute(db.text("ALTER TABLE transcript ADD COLUMN duration FLOAT"))
+                conn.commit()
+                print("Added duration column to transcript table")
+        
         db.create_all()
     app.run(host='0.0.0.0', port=5002, debug=True, ssl_context=('ssl_keys/cert.pem', 'ssl_keys/key.pem'))
