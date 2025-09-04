@@ -7,6 +7,9 @@ from agents.manager_agent import create_manager_agent
 from agents.general_agent import supervisor_agent_general
 from dotenv import load_dotenv
 import os, tempfile, time, json, subprocess, uuid, traceback, io, re, shutil
+import arabic_reshaper
+from bidi.algorithm import get_display
+import html
 # import logging
 from langchain_openai import ChatOpenAI
 from pathlib import Path
@@ -25,15 +28,18 @@ import io
 from flask import Flask, render_template, request, redirect, url_for, flash,jsonify
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from models import db, User, ChatSession, ChatMessage, ClientSummary, TeamNotification, NotificationRead, Transcript
+from sqlalchemy import func
 from datetime import datetime
 import uuid
 import pandas as pd
 import traceback
+import re
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.units import inch
+from reportlab.lib.fonts import addMapping
 try:
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfgen import canvas  # kept (fallback)
@@ -51,63 +57,381 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
 
+# Arabic text detection function
+def contains_arabic(text):
+    """Check if text contains Arabic characters"""
+    arabic_pattern = re.compile(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]')
+    return bool(arabic_pattern.search(text))
+
+# Initialize Arabic font support
+def setup_arabic_font():
+    """Setup Arabic font for PDF generation"""
+    try:
+        # Register DejaVu Sans font which supports Arabic
+        # This font is commonly available on most systems
+        import platform
+        system = platform.system()
+        
+        font_paths = []
+        if system == "Darwin":  # macOS
+            font_paths = [
+                "/System/Library/Fonts/Helvetica.ttc",
+                "/Library/Fonts/Arial Unicode MS.ttf",
+                "/System/Library/Fonts/Apple Symbols.ttf"
+            ]
+        elif system == "Linux":
+            font_paths = [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+            ]
+        elif system == "Windows":
+            font_paths = [
+                "C:/Windows/Fonts/arial.ttf",
+                "C:/Windows/Fonts/calibri.ttf"
+            ]
+        
+        # Try to find and register an available font
+        for font_path in font_paths:
+            try:
+                if os.path.exists(font_path):
+                    pdfmetrics.registerFont(TTFont('ArabicFont', font_path))
+                    addMapping('ArabicFont', 0, 0, 'ArabicFont')  # normal
+                    return 'ArabicFont'
+            except Exception as e:
+                continue
+        
+        # Fallback: try to use built-in fonts that might support some Unicode
+        return 'Helvetica'
+        
+    except Exception as e:
+        print(f"Error setting up Arabic font: {e}")
+        return 'Helvetica'
+
+# Setup Arabic font on app startup
+arabic_font = setup_arabic_font()
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 def _wrap_lines(line, max_width, canv, font_name="Helvetica", font_size=10):
     """Yield wrapped substrings that fit max_width."""
+    # Use Arabic font if line contains Arabic text
+    if contains_arabic(line) and arabic_font != 'Helvetica':
+        font_name = arabic_font
+    
     words = line.split(" ")
     out, cur = [], ""
     for w in words:
         test = (cur + " " + w).strip()
-        if pdfmetrics.stringWidth(test, font_name, font_size) <= max_width:
-            cur = test
-        else:
-            if cur:
-                out.append(cur)
-            cur = w
+        try:
+            if pdfmetrics.stringWidth(test, font_name, font_size) <= max_width:
+                cur = test
+            else:
+                if cur:
+                    out.append(cur)
+                cur = w
+        except:
+            # Fallback to Helvetica if font fails
+            if pdfmetrics.stringWidth(test, "Helvetica", font_size) <= max_width:
+                cur = test
+            else:
+                if cur:
+                    out.append(cur)
+                cur = w
     if cur:
         out.append(cur)
     return out
 
 def write_transcript_pdf(pdf_path: str, title: str, pretty_text: str, meta: dict | None = None):
-    c = canvas.Canvas(pdf_path, pagesize=LETTER)
-    width, height = LETTER
-    lm = rm = 0.75 * inch
-    tm = bm = 0.75 * inch
-    y = height - tm
+    """
+    Generate PDF with proper Arabic support using HTML-to-PDF conversion
+    This ensures proper Arabic shaping, RTL layout, and UTF-8 encoding
+    """
+    try:
+        # Detect if we need Arabic/RTL support
+        has_arabic = contains_arabic(title + " " + pretty_text)
+        direction = "rtl" if has_arabic else "ltr"
+        
+        # Create HTML template with proper Arabic support
+        html_content = f"""
+        <!DOCTYPE html>
+        <html lang="{'ar' if has_arabic else 'en'}" dir="{direction}">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&family=Noto+Sans+Arabic:wght@400;700&display=swap');
+                
+                body {{
+                    font-family: 'Noto Naskh Arabic', 'Noto Sans Arabic', 'Arial Unicode MS', Arial, sans-serif;
+                    direction: {direction};
+                    text-align: {'right' if has_arabic else 'left'};
+                    line-height: 1.6;
+                    margin: 20px;
+                    font-size: 12px;
+                    color: #333;
+                }}
+                
+                .title {{
+                    font-size: 18px;
+                    font-weight: bold;
+                    margin-bottom: 20px;
+                    color: #000;
+                    text-align: {'right' if has_arabic else 'left'};
+                }}
+                
+                .meta {{
+                    font-size: 10px;
+                    color: #666;
+                    margin-bottom: 20px;
+                    border-bottom: 1px solid #ddd;
+                    padding-bottom: 10px;
+                }}
+                
+                .meta strong {{
+                    font-weight: bold;
+                    color: #333;
+                }}
+                
+                .content {{
+                    font-size: 11px;
+                    line-height: 1.5;
+                }}
+                
+                .content div {{
+                    margin-bottom: 5px;
+                }}
+                
+                .speaker {{
+                    font-weight: bold;
+                    color: #2c5aa0;
+                    margin-bottom: 8px;
+                    margin-top: 15px;
+                }}
+                
+                .timestamp {{
+                    color: #666;
+                    font-size: 10px;
+                    font-weight: normal;
+                    margin-bottom: 5px;
+                }}
+                
+                /* Ensure proper Arabic text rendering */
+                .arabic {{
+                    font-family: 'Noto Naskh Arabic', 'Amiri', 'Scheherazade', 'Arial Unicode MS', Arial, sans-serif;
+                    direction: rtl;
+                    text-align: right;
+                    unicode-bidi: embed;
+                }}
+                
+                @page {{
+                    margin: 2cm;
+                    size: A4;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="title {'arabic' if has_arabic else ''}">{process_arabic_text(title)}</div>
+            
+            {('<div class="meta">' + '<br>'.join([f'<strong>{html.escape(k)}:</strong> {process_arabic_text(str(v))}' for k, v in meta.items()]) + '</div>') if meta else ''}
+            
+            <div class="content {'arabic' if has_arabic else ''}">{process_transcript_content(pretty_text)}</div>
+        </body>
+        </html>
+        """
+        
+        # Generate PDF using ReportLab fallback since WeasyPrint has dependency issues
+        fallback_simple_pdf(pdf_path, title, pretty_text, meta)
+        
+    except Exception as e:
+        print(f"Error generating Arabic PDF: {e}")
+        # Fallback to simple text-based approach
+        fallback_simple_pdf(pdf_path, title, pretty_text, meta)
 
-    # Title
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(lm, y, title)
-    y -= 0.28 * inch
+def process_arabic_text(text):
+    """Process text for proper Arabic display with reshaping and bidi"""
+    if not text:
+        return ""
+    
+    try:
+        # HTML escape first to prevent injection issues
+        text = html.escape(text)
+        
+        if contains_arabic(text):
+            # Reshape Arabic text for proper character joining
+            reshaped_text = arabic_reshaper.reshape(text)
+            # Apply bidirectional algorithm for proper RTL display
+            bidi_text = get_display(reshaped_text)
+            return bidi_text
+        return text
+    except Exception as e:
+        print(f"Error processing Arabic text: {e}")
+        return html.escape(text)
 
-    # Meta (optional)
-    c.setFont("Helvetica", 9)
-    if meta:
-        for k, v in meta.items():
-            c.drawString(lm, y, f"{k}: {v}")
-            y -= 12
-        y -= 6
+def process_transcript_content(content):
+    """Process transcript content with proper Arabic handling"""
+    if not content:
+        return ""
+    
+    lines = []
+    for line in content.splitlines():
+        # Skip empty lines
+        if not line.strip():
+            lines.append("<br>")
+            continue
+            
+        processed_line = process_arabic_text(line)
+        
+        # Add CSS classes for better formatting
+        if '[' in line and ']' in line and ('–' in line or '-' in line):  # Timestamp line
+            processed_line = f'<div class="timestamp">{processed_line}</div>'
+        elif 'Speaker' in line and ':' in line:
+            processed_line = f'<div class="speaker">{processed_line}</div>'
+        else:
+            processed_line = f'<div>{processed_line}</div>'
+        
+        lines.append(processed_line)
+    
+    return '\n'.join(lines)
 
-    # Body
-    c.setFont("Helvetica", 10)
-    maxw = width - lm - rm
-    line_h = 14
-    for line in pretty_text.splitlines():
-        chunks = _wrap_lines(line, maxw, c)
-        for chunk in chunks:
-            if y <= bm:
-                c.showPage()
-                y = height - tm
-                c.setFont("Helvetica", 10)
-            c.drawString(lm, y, chunk)
-            y -= line_h
-        # paragraph spacing
-        if not chunks:
-            y -= line_h
-    c.save()
+def fallback_simple_pdf(pdf_path: str, title: str, pretty_text: str, meta: dict | None = None):
+    """Enhanced PDF generation with Arabic support using ReportLab"""
+    try:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        import textwrap
+        
+        c = canvas.Canvas(pdf_path, pagesize=LETTER)
+        width, height = LETTER
+        lm = rm = 0.75 * inch
+        tm = bm = 0.75 * inch
+        y = height - tm
+
+        # Try to register Arabic-compatible font
+        arabic_font = "Helvetica"  # Default fallback
+        try:
+            # Look for system fonts that support Arabic
+            potential_fonts = [
+                "/System/Library/Fonts/Helvetica.ttc",  # macOS
+                "/System/Library/Fonts/Arial Unicode MS.ttf",  # macOS
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # Linux
+                "C:/Windows/Fonts/arial.ttf"  # Windows
+            ]
+            
+            for font_path in potential_fonts:
+                if os.path.exists(font_path):
+                    try:
+                        pdfmetrics.registerFont(TTFont("ArabicFont", font_path))
+                        arabic_font = "ArabicFont"
+                        break
+                    except:
+                        continue
+        except:
+            pass
+
+        # Title with Arabic support
+        c.setFont("Helvetica-Bold" if arabic_font == "Helvetica" else arabic_font, 14)
+        if contains_arabic(title):
+            try:
+                reshaped_title = arabic_reshaper.reshape(title)
+                bidi_title = get_display(reshaped_title)
+                c.drawRightString(width - rm, y, bidi_title)
+            except:
+                c.drawString(lm, y, title)  # Fallback
+        else:
+            c.drawString(lm, y, title)
+        y -= 0.28 * inch
+
+        # Metadata
+        if meta:
+            c.setFont("Helvetica" if arabic_font == "Helvetica" else arabic_font, 9)
+            for k, v in meta.items():
+                meta_text = f"{k}: {v}"
+                if contains_arabic(meta_text):
+                    try:
+                        reshaped_meta = arabic_reshaper.reshape(meta_text)
+                        bidi_meta = get_display(reshaped_meta)
+                        c.drawRightString(width - rm, y, bidi_meta)
+                    except:
+                        c.drawString(lm, y, meta_text)
+                else:
+                    c.drawString(lm, y, meta_text)
+                y -= 12
+            y -= 6
+
+        # Content
+        c.setFont("Helvetica" if arabic_font == "Helvetica" else arabic_font, 10)
+        maxw = width - lm - rm
+        line_h = 14
+        max_chars_per_line = int(maxw / 6)  # Approximate character width
+        
+        for line in pretty_text.splitlines():
+            if not line.strip():
+                y -= line_h / 2
+                continue
+                
+            if contains_arabic(line):
+                try:
+                    # Process Arabic text
+                    reshaped_line = arabic_reshaper.reshape(line)
+                    bidi_line = get_display(reshaped_line)
+                    
+                    # Wrap long lines
+                    wrapped_lines = textwrap.wrap(bidi_line, width=max_chars_per_line)
+                    for wrapped_line in wrapped_lines:
+                        if y <= bm + 20:
+                            c.showPage()
+                            y = height - tm
+                            c.setFont("Helvetica" if arabic_font == "Helvetica" else arabic_font, 10)
+                        
+                        c.drawRightString(width - rm, y, wrapped_line)
+                        y -= line_h
+                except Exception as arabic_error:
+                    print(f"Arabic processing failed: {arabic_error}")
+                    # Fallback to original text
+                    chunks = _wrap_lines(line, maxw, c, "Helvetica", 10)
+                    for chunk in chunks:
+                        if y <= bm:
+                            c.showPage()
+                            y = height - tm
+                            c.setFont("Helvetica", 10)
+                        c.drawString(lm, y, chunk)
+                        y -= line_h
+            else:
+                # Process English/Latin text
+                chunks = _wrap_lines(line, maxw, c, "Helvetica" if arabic_font == "Helvetica" else arabic_font, 10)
+                for chunk in chunks:
+                    if y <= bm:
+                        c.showPage()
+                        y = height - tm
+                        c.setFont("Helvetica" if arabic_font == "Helvetica" else arabic_font, 10)
+                    c.drawString(lm, y, chunk)
+                    y -= line_h
+
+        c.save()
+        print(f"Enhanced Arabic PDF saved to: {pdf_path}")
+        
+    except Exception as e:
+        print(f"Enhanced PDF generation failed: {e}")
+        traceback.print_exc()
+        # Last resort - basic text PDF
+        try:
+            c = canvas.Canvas(pdf_path, pagesize=LETTER)
+            c.setFont("Helvetica", 10)
+            c.drawString(1*inch, 10*inch, "Meeting Transcript")
+            c.drawString(1*inch, 9.5*inch, title)
+            y = 9*inch
+            for line in pretty_text.splitlines()[:50]:  # Limit lines to prevent errors
+                safe_line = line.encode('ascii', errors='ignore').decode('ascii')
+                c.drawString(1*inch, y, safe_line[:80])  # Limit line length
+                y -= 14
+                if y < 2*inch:
+                    break
+            c.save()
+        except:
+            raise
 
 
 # Initialize manager_agent as None, will be created when needed
@@ -349,12 +673,149 @@ def mark_notification_read():
     
     return jsonify({'success': True})
 
+@app.route('/api/talk-to-calls', methods=['POST'])
+@management_required
+def talk_to_calls():
+    """Chat with team calls data - aggregated summaries and insights"""
+    try:
+        data = request.get_json()
+        user_message = data.get('message', '').strip()
+        
+        if not user_message:
+            return jsonify({'error': 'Message is required'}), 400
+        
+        # Get managed agents based on user role
+        if current_user.role == 'manager':
+            # Managers see their direct reports only
+            managed_agents = current_user.get_managed_agents()
+            managed_agent_ids = [agent.id for agent in managed_agents]
+        else:
+            # SME Leaders see all agents
+            managed_agents = User.query.filter_by(role='salesagent').all()
+            managed_agent_ids = [agent.id for agent in managed_agents]
+        
+        # Get transcripts with meeting summaries from managed agents
+        transcripts = Transcript.query.filter(
+            Transcript.user_id.in_(managed_agent_ids),
+            Transcript.meeting_summary.isnot(None),
+            Transcript.meeting_summary != ''
+        ).order_by(Transcript.created_at.desc()).limit(50).all()
+        
+        # Prepare context from call summaries
+        calls_context = []
+        for transcript in transcripts:
+            agent = User.query.get(transcript.user_id)
+            
+            # Get client name from associated chat session
+            client_name = 'Unknown Client'
+            if transcript.chat_id:
+                chat_session = ChatSession.query.get(transcript.chat_id)
+                if chat_session and chat_session.client_name:
+                    client_name = chat_session.client_name
+            
+            calls_context.append({
+                'agent': agent.username if agent else 'Unknown',
+                'date': transcript.created_at.strftime('%Y-%m-%d %H:%M'),
+                'client': client_name,
+                'title': transcript.title or 'Untitled Meeting',
+                'summary': transcript.meeting_summary,
+                'transcript_snippet': transcript.text[:200] + '...' if len(transcript.text) > 200 else transcript.text
+            })
+        
+        # Create team context with all managed agents (even those without calls)
+        team_context = []
+        for agent in managed_agents:
+            # Count total calls for this agent
+            total_calls = Transcript.query.filter_by(user_id=agent.id).count()
+            calls_with_summaries = Transcript.query.filter(
+                Transcript.user_id == agent.id,
+                Transcript.meeting_summary.isnot(None),
+                Transcript.meeting_summary != ''
+            ).count()
+            
+            # Count unique clients for this agent
+            unique_clients = db.session.query(func.count(func.distinct(ChatSession.client_name)))\
+                .filter(
+                    ChatSession.user_id == agent.id,
+                    ChatSession.client_name.isnot(None),
+                    ChatSession.client_name != ''
+                ).scalar() or 0
+            
+            team_context.append({
+                'agent_name': agent.username,
+                'total_calls': total_calls,
+                'calls_with_summaries': calls_with_summaries,
+                'unique_clients': unique_clients,
+                'manager': current_user.username
+            })
+        
+        # Create system prompt for calls analysis
+        system_prompt = f"""You are a team calls analyst for a sales {'manager' if current_user.role == 'manager' else 'SME leader'}. You have access to meeting summaries and call data from the team.
+
+Your role is to:
+1. Analyze call patterns, trends, and insights
+2. Identify common client concerns, objections, or opportunities  
+3. Provide actionable recommendations for team performance
+4. Answer specific questions about individual calls or overall patterns
+5. Help managers understand their team's sales activities
+
+TEAM OVERVIEW:
+Your team consists of {len(managed_agents)} agents: {', '.join([agent.username for agent in managed_agents])}
+
+Team Performance Summary:
+{json.dumps(team_context, indent=2)}
+
+RECENT CALLS DATA:
+Total calls with summaries analyzed: {len(calls_context)}
+Date range: {transcripts[-1].created_at.strftime('%Y-%m-%d') if transcripts else 'N/A'} to {transcripts[0].created_at.strftime('%Y-%m-%d') if transcripts else 'N/A'}
+
+Detailed call summaries:
+{json.dumps(calls_context, indent=2)}
+
+Guidelines:
+- Be concise but insightful
+- Focus on actionable insights for team management
+- Highlight trends and patterns across agents
+- Reference specific calls when relevant
+- Use bullet points for clarity when appropriate
+- Consider agents who haven't made calls recently as needing attention
+- Provide coaching recommendations where appropriate
+"""
+        
+        # Call OpenAI API
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        assistant_response = response.choices[0].message.content
+        
+        return jsonify({
+            'response': assistant_response,
+            'calls_analyzed': len(calls_context),
+            'team_size': len(managed_agents),
+            'agents_with_calls': len([agent for agent in team_context if agent['calls_with_summaries'] > 0])
+        })
+        
+    except Exception as e:
+        print(f"Error in talk-to-calls: {e}")
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to process request'}), 500
+
 @app.route('/manager/dashboard')
 @management_required
 def manager_dashboard():
-    agent_stats = get_sales_agents_client_stats()
-    dashboard_summary = get_dashboard_summary()
-    productivity_data = get_seller_productivity()
+    # Pass current manager's ID to get only their team's stats
+    manager_id = current_user.id if current_user.role == 'manager' else None
+    
+    agent_stats = get_sales_agents_client_stats(manager_id)
+    dashboard_summary = get_dashboard_summary(manager_id)
+    productivity_data = get_seller_productivity(manager_id)
     predictions_data = get_predictions_data()
     return render_template('manager_dashboard.html', 
                          agent_stats=agent_stats,
@@ -365,10 +826,10 @@ def manager_dashboard():
 @app.route('/smeleader/dashboard')
 @role_required('smeleader')
 def smeleader_dashboard():
-    # SME Leaders get access to manager stats plus manager oversight
-    agent_stats = get_sales_agents_client_stats()
-    dashboard_summary = get_dashboard_summary()
-    productivity_data = get_seller_productivity()
+    # SME Leaders get access to all agents (pass None for manager_id)
+    agent_stats = get_sales_agents_client_stats(None)
+    dashboard_summary = get_dashboard_summary(None)
+    productivity_data = get_seller_productivity(None)
     predictions_data = get_predictions_data()
     
     # Get all managers for SME Leader oversight with their assigned agents count
@@ -1096,26 +1557,14 @@ def transcribe_audio():
         audio_file = request.files['audio']
         filename = secure_filename(audio_file.filename or 'recording.webm')
 
-        # Create directories for storing audio files
-        audio_base_dir = Path("uploads") / "audio" / str(current_user.id)
+        # Create directory only for storing transcript files (no audio storage)
         transcript_base_dir = Path("uploads") / "transcripts" / str(current_user.id)
-        audio_base_dir.mkdir(parents=True, exist_ok=True)
         transcript_base_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save original audio file
-        stamp = int(time.time())
-        safe_title = "".join(c for c in title if c.isalnum() or c in (" ", "_", "-")).rstrip() or "recording"
-        audio_filename = f"{stamp}_{safe_title}_{filename}"
-        audio_path = audio_base_dir / audio_filename
-
-        audio_file.save(str(audio_path))
-
-        # Save to temp for transcription
+        # Save to temp for transcription only (don't save permanently)
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp:
             tmp_path = tmp.name
-            # Copy the saved audio file to temp location for processing
-            import shutil
-            shutil.copy2(str(audio_path), tmp_path)
+            audio_file.save(tmp_path)  # Save directly to temp
 
         # Choose model & response format
         model_name = os.getenv("STT_MODEL", "whisper-1")
@@ -1176,6 +1625,10 @@ def transcribe_audio():
                  for seg in labeled]
         pretty_text = "\n".join(lines).strip()
 
+        # Generate filename components for PDF
+        stamp = int(time.time())
+        safe_title = "".join(c for c in title if c.isalnum() or c in (" ", "_", "-")).rstrip() or "recording"
+
         # Save PDF
         pdf_path = transcript_base_dir / f"{stamp}_{safe_title}.pdf"
 
@@ -1186,13 +1639,13 @@ def transcribe_audio():
             meta={"Model": model_name, "Speakers": str(num_speakers)}
         )
 
-        # DB row (store both audio and transcript paths, and link to chat if provided)
+        # DB row (store only transcript path, no audio storage)
         transcript = Transcript(
             user_id=current_user.id,
             chat_id=chat_id,  # This will be None if not provided, or the actual chat_id
             title=title,
             text=pretty_text,  # used for sidebar preview and inline display
-            audio_file_path=str(audio_path),  # Store path to original audio file
+            audio_file_path=None,  # No longer store audio files
             file_path=str(pdf_path),          # Store path to PDF transcript
             speakers_count=num_speakers,
             duration=duration
@@ -1214,7 +1667,7 @@ def transcribe_audio():
                 'duration': f"{int(duration//60)}:{int(duration%60):02d}" if duration else 'Unknown',
                 'participants': f"{num_speakers} speaker{'s' if num_speakers != 1 else ''}",
                 'date_time': transcript.created_at.strftime('%d/%m/%Y, %H:%M'),
-                'recording_link': url_for('download_audio', transcript_id=transcript.id)
+                'recording_link': 'Audio not stored (transcript only)'  # No audio files saved
             }
             
             print(f"[DEBUG] Meeting metadata: {meeting_metadata}")
@@ -1248,7 +1701,7 @@ def transcribe_audio():
             "text": pretty_text,
             "meeting_summary": meeting_summary if meeting_summary else None,  # Handle None case
             "file_url": url_for('download_transcript', transcript_id=transcript.id),
-            "audio_url": url_for('download_audio', transcript_id=transcript.id),
+            "audio_url": None,  # No longer providing audio downloads
             "speakers": num_speakers,
             "duration": duration,
             "chat_id": chat_id,
@@ -1302,10 +1755,8 @@ def download_transcript(transcript_id):
 @app.route('/v1/transcripts/<int:transcript_id>/audio', methods=['GET'])
 @login_required
 def download_audio(transcript_id):
-    t = Transcript.query.filter_by(id=transcript_id, user_id=current_user.id).first()
-    if not t or not t.audio_file_path or not os.path.exists(t.audio_file_path):
-        return jsonify({"error": "Audio file not found"}), 404
-    return send_file(t.audio_file_path, as_attachment=False)  # Stream for playback
+    # Audio files are no longer stored to reduce storage usage
+    return jsonify({"error": "Audio files are not stored. Only transcripts are available."}), 404
 
 @app.route('/v1/transcripts/<int:transcript_id>', methods=['DELETE'])
 @login_required
@@ -1317,8 +1768,7 @@ def delete_transcript(transcript_id):
     try:
         if t.file_path and os.path.exists(t.file_path):
             os.remove(t.file_path)
-        if t.audio_file_path and os.path.exists(t.audio_file_path):
-            os.remove(t.audio_file_path)
+        # Audio files are no longer stored, so no need to delete them
     except Exception as e:
         print("file delete warning:", e)
     db.session.delete(t)

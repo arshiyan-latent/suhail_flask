@@ -190,6 +190,74 @@
                 </svg>
                 <span>Adjust Pricing Strategy</span>
             </button>
+
+            <button id="talkToCallsBtn" class="flex items-center gap-2 px-4 py-2 bg-orange-500/20 hover:bg-orange-500/30 rounded-lg backdrop-blur-md transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                </svg>
+                <span>Talk to Calls</span>
+            </button>
+        </div>
+
+        <!-- Talk to Calls Modal -->
+        <div id="talkToCallsModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden flex items-center justify-center z-50">
+            <div class="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl shadow-2xl w-full max-w-4xl h-5/6 m-4 flex flex-col border border-white/10">
+                <!-- Modal Header -->
+                <div class="flex items-center justify-between p-6 border-b border-white/10">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center">
+                            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-bold text-white">Talk to Team Calls</h2>
+                            <p class="text-gray-400 text-sm">Ask questions about your team's calls and meetings</p>
+                        </div>
+                    </div>
+                    <button id="closeTalkToCallsModal" class="text-gray-400 hover:text-white transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Chat Messages Area -->
+                <div id="callsChatMessages" class="flex-1 overflow-y-auto p-6 space-y-4">
+                    <!-- Welcome message -->
+                    <div class="flex items-start space-x-3">
+                        <div class="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
+                            <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                            </svg>
+                        </div>
+                        <div class="bg-gray-700/50 rounded-lg px-4 py-3 max-w-md">
+                            <p class="text-white">Hi! I'm your team calls analyst. Ask me anything about your agents' calls, meetings, and customer interactions. I have access to all call summaries and transcripts.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Input Area -->
+                <div class="border-t border-white/10 p-6">
+                    <div class="flex space-x-3">
+                        <input 
+                            type="text" 
+                            id="callsChatInput"
+                            placeholder="Ask about team calls... (e.g., 'What were the main issues discussed today?')"
+                            class="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+                        />
+                        <button 
+                            id="sendCallsChatBtn"
+                            class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                            </svg>
+                            Send
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -295,6 +363,146 @@
                 });
             }
         });
+
+        // Talk to Calls Modal functionality
+        const talkToCallsBtn = document.getElementById('talkToCallsBtn');
+        const talkToCallsModal = document.getElementById('talkToCallsModal');
+        const closeTalkToCallsModal = document.getElementById('closeTalkToCallsModal');
+        const callsChatInput = document.getElementById('callsChatInput');
+        const sendCallsChatBtn = document.getElementById('sendCallsChatBtn');
+        const callsChatMessages = document.getElementById('callsChatMessages');
+
+        // Open modal
+        talkToCallsBtn.addEventListener('click', () => {
+            talkToCallsModal.classList.remove('hidden');
+            callsChatInput.focus();
+        });
+
+        // Close modal
+        closeTalkToCallsModal.addEventListener('click', () => {
+            talkToCallsModal.classList.add('hidden');
+        });
+
+        // Close modal when clicking outside
+        talkToCallsModal.addEventListener('click', (e) => {
+            if (e.target === talkToCallsModal) {
+                talkToCallsModal.classList.add('hidden');
+            }
+        });
+
+        // Handle Enter key in input
+        callsChatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendCallsMessage();
+            }
+        });
+
+        // Send message button
+        sendCallsChatBtn.addEventListener('click', sendCallsMessage);
+
+        function sendCallsMessage() {
+            const message = callsChatInput.value.trim();
+            if (!message) return;
+
+            // Add user message to chat
+            addCallsMessage('user', message);
+            callsChatInput.value = '';
+
+            // Show typing indicator
+            const typingIndicator = addCallsTypingIndicator();
+
+            // Send to backend
+            fetch('/api/talk-to-calls', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message: message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove typing indicator
+                typingIndicator.remove();
+                
+                if (data.error) {
+                    addCallsMessage('assistant', 'Sorry, I encountered an error. Please try again.');
+                } else {
+                    addCallsMessage('assistant', data.response);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                typingIndicator.remove();
+                addCallsMessage('assistant', 'Sorry, I encountered an error. Please try again.');
+            });
+        }
+
+        function addCallsMessage(sender, message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'flex items-start space-x-3';
+            
+            if (sender === 'user') {
+                messageDiv.className += ' flex-row-reverse space-x-reverse';
+                messageDiv.innerHTML = `
+                    <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 1H5C3.89 1 3 1.89 3 3V21C3 22.11 3.89 23 5 23H19C20.11 23 21 22.11 21 21V9M20 8L18 6V8H20Z"/>
+                        </svg>
+                    </div>
+                    <div class="bg-blue-600 rounded-lg px-4 py-3 max-w-md">
+                        <p class="text-white">${message}</p>
+                    </div>
+                `;
+            } else {
+                messageDiv.innerHTML = `
+                    <div class="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
+                        <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                    </div>
+                    <div class="bg-gray-700/50 rounded-lg px-4 py-3 max-w-3xl">
+                        <div class="text-white prose prose-invert max-w-none" style="color: white;">${formatMessage(message)}</div>
+                    </div>
+                `;
+            }
+            
+            callsChatMessages.appendChild(messageDiv);
+            callsChatMessages.scrollTop = callsChatMessages.scrollHeight;
+        }
+
+        function addCallsTypingIndicator() {
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'flex items-start space-x-3 typing-indicator';
+            typingDiv.innerHTML = `
+                <div class="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
+                    <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                </div>
+                <div class="bg-gray-700/50 rounded-lg px-4 py-3">
+                    <div class="flex space-x-1">
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    </div>
+                </div>
+            `;
+            
+            callsChatMessages.appendChild(typingDiv);
+            callsChatMessages.scrollTop = callsChatMessages.scrollHeight;
+            return typingDiv;
+        }
+
+        function formatMessage(message) {
+            // Convert markdown-like formatting to HTML
+            return message
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/\n/g, '<br>')
+                .replace(/^(.*)$/, '<p>$1</p>')
+                .replace(/<p><\/p>/g, '');
+        }
     </script>
 </body>
 </html>

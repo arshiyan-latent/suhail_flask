@@ -457,7 +457,7 @@
                   title: data.title,
                   content: data.text,
                   timestamp: data.created_at,
-                  audio_url: data.audio_url,
+                  audio_url: null, // Audio no longer stored
                   pdf_url: data.file_url,
                   speakers: data.speakers,
                   duration: data.duration
@@ -955,11 +955,6 @@
           </div>
         </div>
         <div class="flex items-center space-x-2">
-          ${transcript.audio_url ? `<button onclick="playAudio('${transcript.audio_url}')" class="p-1 text-yellow-200 hover:text-yellow-100 transition-colors" title="Play Recording">
-            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z"/>
-            </svg>
-          </button>` : ''}
           <button onclick="toggleTranscriptText(${transcript.transcript_id})" class="p-1 text-yellow-200 hover:text-yellow-100 transition-colors" title="Show/Hide Transcript">
             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z"/>
@@ -996,13 +991,9 @@
     }
   };
 
+  // Audio playback is no longer available (audio files are not stored)
   const playAudio = (audioUrl) => {
-    // Create and play audio element
-    const audio = new Audio(audioUrl);
-    audio.play().catch(e => {
-      console.error('Error playing audio:', e);
-      alert('Unable to play audio file.');
-    });
+    alert('Audio files are no longer stored to reduce storage usage. Only transcripts are available.');
   };
 
   const editTranscript = async (transcriptId) => {
