@@ -1,3 +1,12 @@
 __pycache__/
 agents/__pycache__/
 .env
+ssl_keys/cert.pem
+ssl_keys/key.pem
+.DS_Store
+uploads/transcripts
+uploads/.DS_Store
+suhail_database.db
+suhail_database.db-shm
+suhail_database.db-wal
+instance/users.db

@@ -2,10 +2,14 @@
 from webbrowser import get
 from agents.agent import llm, get_supervisor_for_user
 from agents.summary.summary_agent import extract_transcript, generate_summary
+from agents.summary.transcript_summary import generate_meeting_summary
 from agents.manager_agent import create_manager_agent
 from agents.general_agent import supervisor_agent_general
 from dotenv import load_dotenv
-import os, tempfile, time, json, subprocess
+import os, tempfile, time, json, subprocess, uuid, traceback, io, re, shutil
+import arabic_reshaper
+from bidi.algorithm import get_display
+import html
 # import logging
 from langchain_openai import ChatOpenAI
 from pathlib import Path
@@ -24,15 +28,18 @@ import io
 from flask import Flask, render_template, request, redirect, url_for, flash,jsonify
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from models import db, User, ChatSession, ChatMessage, ClientSummary, TeamNotification, NotificationRead, Transcript
+from sqlalchemy import func
 from datetime import datetime
 import uuid
 import pandas as pd
 import traceback
+import re
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.units import inch
+from reportlab.lib.fonts import addMapping
 try:
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfgen import canvas  # kept (fallback)
@@ -50,63 +57,381 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
 
+# Arabic text detection function
+def contains_arabic(text):
+    """Check if text contains Arabic characters"""
+    arabic_pattern = re.compile(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]')
+    return bool(arabic_pattern.search(text))
+
+# Initialize Arabic font support
+def setup_arabic_font():
+    """Setup Arabic font for PDF generation"""
+    try:
+        # Register DejaVu Sans font which supports Arabic
+        # This font is commonly available on most systems
+        import platform
+        system = platform.system()
+        
+        font_paths = []
+        if system == "Darwin":  # macOS
+            font_paths = [
+                "/System/Library/Fonts/Helvetica.ttc",
+                "/Library/Fonts/Arial Unicode MS.ttf",
+                "/System/Library/Fonts/Apple Symbols.ttf"
+            ]
+        elif system == "Linux":
+            font_paths = [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/TTF/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+            ]
+        elif system == "Windows":
+            font_paths = [
+                "C:/Windows/Fonts/arial.ttf",
+                "C:/Windows/Fonts/calibri.ttf"
+            ]
+        
+        # Try to find and register an available font
+        for font_path in font_paths:
+            try:
+                if os.path.exists(font_path):
+                    pdfmetrics.registerFont(TTFont('ArabicFont', font_path))
+                    addMapping('ArabicFont', 0, 0, 'ArabicFont')  # normal
+                    return 'ArabicFont'
+            except Exception as e:
+                continue
+        
+        # Fallback: try to use built-in fonts that might support some Unicode
+        return 'Helvetica'
+        
+    except Exception as e:
+        print(f"Error setting up Arabic font: {e}")
+        return 'Helvetica'
+
+# Setup Arabic font on app startup
+arabic_font = setup_arabic_font()
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 def _wrap_lines(line, max_width, canv, font_name="Helvetica", font_size=10):
     """Yield wrapped substrings that fit max_width."""
+    # Use Arabic font if line contains Arabic text
+    if contains_arabic(line) and arabic_font != 'Helvetica':
+        font_name = arabic_font
+    
     words = line.split(" ")
     out, cur = [], ""
     for w in words:
         test = (cur + " " + w).strip()
-        if pdfmetrics.stringWidth(test, font_name, font_size) <= max_width:
-            cur = test
-        else:
-            if cur:
-                out.append(cur)
-            cur = w
+        try:
+            if pdfmetrics.stringWidth(test, font_name, font_size) <= max_width:
+                cur = test
+            else:
+                if cur:
+                    out.append(cur)
+                cur = w
+        except:
+            # Fallback to Helvetica if font fails
+            if pdfmetrics.stringWidth(test, "Helvetica", font_size) <= max_width:
+                cur = test
+            else:
+                if cur:
+                    out.append(cur)
+                cur = w
     if cur:
         out.append(cur)
     return out
 
 def write_transcript_pdf(pdf_path: str, title: str, pretty_text: str, meta: dict | None = None):
-    c = canvas.Canvas(pdf_path, pagesize=LETTER)
-    width, height = LETTER
-    lm = rm = 0.75 * inch
-    tm = bm = 0.75 * inch
-    y = height - tm
+    """
+    Generate PDF with proper Arabic support using HTML-to-PDF conversion
+    This ensures proper Arabic shaping, RTL layout, and UTF-8 encoding
+    """
+    try:
+        # Detect if we need Arabic/RTL support
+        has_arabic = contains_arabic(title + " " + pretty_text)
+        direction = "rtl" if has_arabic else "ltr"
+        
+        # Create HTML template with proper Arabic support
+        html_content = f"""
+        <!DOCTYPE html>
+        <html lang="{'ar' if has_arabic else 'en'}" dir="{direction}">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&family=Noto+Sans+Arabic:wght@400;700&display=swap');
+                
+                body {{
+                    font-family: 'Noto Naskh Arabic', 'Noto Sans Arabic', 'Arial Unicode MS', Arial, sans-serif;
+                    direction: {direction};
+                    text-align: {'right' if has_arabic else 'left'};
+                    line-height: 1.6;
+                    margin: 20px;
+                    font-size: 12px;
+                    color: #333;
+                }}
+                
+                .title {{
+                    font-size: 18px;
+                    font-weight: bold;
+                    margin-bottom: 20px;
+                    color: #000;
+                    text-align: {'right' if has_arabic else 'left'};
+                }}
+                
+                .meta {{
+                    font-size: 10px;
+                    color: #666;
+                    margin-bottom: 20px;
+                    border-bottom: 1px solid #ddd;
+                    padding-bottom: 10px;
+                }}
+                
+                .meta strong {{
+                    font-weight: bold;
+                    color: #333;
+                }}
+                
+                .content {{
+                    font-size: 11px;
+                    line-height: 1.5;
+                }}
+                
+                .content div {{
+                    margin-bottom: 5px;
+                }}
+                
+                .speaker {{
+                    font-weight: bold;
+                    color: #2c5aa0;
+                    margin-bottom: 8px;
+                    margin-top: 15px;
+                }}
+                
+                .timestamp {{
+                    color: #666;
+                    font-size: 10px;
+                    font-weight: normal;
+                    margin-bottom: 5px;
+                }}
+                
+                /* Ensure proper Arabic text rendering */
+                .arabic {{
+                    font-family: 'Noto Naskh Arabic', 'Amiri', 'Scheherazade', 'Arial Unicode MS', Arial, sans-serif;
+                    direction: rtl;
+                    text-align: right;
+                    unicode-bidi: embed;
+                }}
+                
+                @page {{
+                    margin: 2cm;
+                    size: A4;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="title {'arabic' if has_arabic else ''}">{process_arabic_text(title)}</div>
+            
+            {('<div class="meta">' + '<br>'.join([f'<strong>{html.escape(k)}:</strong> {process_arabic_text(str(v))}' for k, v in meta.items()]) + '</div>') if meta else ''}
+            
+            <div class="content {'arabic' if has_arabic else ''}">{process_transcript_content(pretty_text)}</div>
+        </body>
+        </html>
+        """
+        
+        # Generate PDF using ReportLab fallback since WeasyPrint has dependency issues
+        fallback_simple_pdf(pdf_path, title, pretty_text, meta)
+        
+    except Exception as e:
+        print(f"Error generating Arabic PDF: {e}")
+        # Fallback to simple text-based approach
+        fallback_simple_pdf(pdf_path, title, pretty_text, meta)
 
-    # Title
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(lm, y, title)
-    y -= 0.28 * inch
+def process_arabic_text(text):
+    """Process text for proper Arabic display with reshaping and bidi"""
+    if not text:
+        return ""
+    
+    try:
+        # HTML escape first to prevent injection issues
+        text = html.escape(text)
+        
+        if contains_arabic(text):
+            # Reshape Arabic text for proper character joining
+            reshaped_text = arabic_reshaper.reshape(text)
+            # Apply bidirectional algorithm for proper RTL display
+            bidi_text = get_display(reshaped_text)
+            return bidi_text
+        return text
+    except Exception as e:
+        print(f"Error processing Arabic text: {e}")
+        return html.escape(text)
 
-    # Meta (optional)
-    c.setFont("Helvetica", 9)
-    if meta:
-        for k, v in meta.items():
-            c.drawString(lm, y, f"{k}: {v}")
-            y -= 12
-        y -= 6
+def process_transcript_content(content):
+    """Process transcript content with proper Arabic handling"""
+    if not content:
+        return ""
+    
+    lines = []
+    for line in content.splitlines():
+        # Skip empty lines
+        if not line.strip():
+            lines.append("<br>")
+            continue
+            
+        processed_line = process_arabic_text(line)
+        
+        # Add CSS classes for better formatting
+        if '[' in line and ']' in line and ('–' in line or '-' in line):  # Timestamp line
+            processed_line = f'<div class="timestamp">{processed_line}</div>'
+        elif 'Speaker' in line and ':' in line:
+            processed_line = f'<div class="speaker">{processed_line}</div>'
+        else:
+            processed_line = f'<div>{processed_line}</div>'
+        
+        lines.append(processed_line)
+    
+    return '\n'.join(lines)
 
-    # Body
-    c.setFont("Helvetica", 10)
-    maxw = width - lm - rm
-    line_h = 14
-    for line in pretty_text.splitlines():
-        chunks = _wrap_lines(line, maxw, c)
-        for chunk in chunks:
-            if y <= bm:
-                c.showPage()
-                y = height - tm
-                c.setFont("Helvetica", 10)
-            c.drawString(lm, y, chunk)
-            y -= line_h
-        # paragraph spacing
-        if not chunks:
-            y -= line_h
-    c.save()
+def fallback_simple_pdf(pdf_path: str, title: str, pretty_text: str, meta: dict | None = None):
+    """Enhanced PDF generation with Arabic support using ReportLab"""
+    try:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        import textwrap
+        
+        c = canvas.Canvas(pdf_path, pagesize=LETTER)
+        width, height = LETTER
+        lm = rm = 0.75 * inch
+        tm = bm = 0.75 * inch
+        y = height - tm
+
+        # Try to register Arabic-compatible font
+        arabic_font = "Helvetica"  # Default fallback
+        try:
+            # Look for system fonts that support Arabic
+            potential_fonts = [
+                "/System/Library/Fonts/Helvetica.ttc",  # macOS
+                "/System/Library/Fonts/Arial Unicode MS.ttf",  # macOS
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # Linux
+                "C:/Windows/Fonts/arial.ttf"  # Windows
+            ]
+            
+            for font_path in potential_fonts:
+                if os.path.exists(font_path):
+                    try:
+                        pdfmetrics.registerFont(TTFont("ArabicFont", font_path))
+                        arabic_font = "ArabicFont"
+                        break
+                    except:
+                        continue
+        except:
+            pass
+
+        # Title with Arabic support
+        c.setFont("Helvetica-Bold" if arabic_font == "Helvetica" else arabic_font, 14)
+        if contains_arabic(title):
+            try:
+                reshaped_title = arabic_reshaper.reshape(title)
+                bidi_title = get_display(reshaped_title)
+                c.drawRightString(width - rm, y, bidi_title)
+            except:
+                c.drawString(lm, y, title)  # Fallback
+        else:
+            c.drawString(lm, y, title)
+        y -= 0.28 * inch
+
+        # Metadata
+        if meta:
+            c.setFont("Helvetica" if arabic_font == "Helvetica" else arabic_font, 9)
+            for k, v in meta.items():
+                meta_text = f"{k}: {v}"
+                if contains_arabic(meta_text):
+                    try:
+                        reshaped_meta = arabic_reshaper.reshape(meta_text)
+                        bidi_meta = get_display(reshaped_meta)
+                        c.drawRightString(width - rm, y, bidi_meta)
+                    except:
+                        c.drawString(lm, y, meta_text)
+                else:
+                    c.drawString(lm, y, meta_text)
+                y -= 12
+            y -= 6
+
+        # Content
+        c.setFont("Helvetica" if arabic_font == "Helvetica" else arabic_font, 10)
+        maxw = width - lm - rm
+        line_h = 14
+        max_chars_per_line = int(maxw / 6)  # Approximate character width
+        
+        for line in pretty_text.splitlines():
+            if not line.strip():
+                y -= line_h / 2
+                continue
+                
+            if contains_arabic(line):
+                try:
+                    # Process Arabic text
+                    reshaped_line = arabic_reshaper.reshape(line)
+                    bidi_line = get_display(reshaped_line)
+                    
+                    # Wrap long lines
+                    wrapped_lines = textwrap.wrap(bidi_line, width=max_chars_per_line)
+                    for wrapped_line in wrapped_lines:
+                        if y <= bm + 20:
+                            c.showPage()
+                            y = height - tm
+                            c.setFont("Helvetica" if arabic_font == "Helvetica" else arabic_font, 10)
+                        
+                        c.drawRightString(width - rm, y, wrapped_line)
+                        y -= line_h
+                except Exception as arabic_error:
+                    print(f"Arabic processing failed: {arabic_error}")
+                    # Fallback to original text
+                    chunks = _wrap_lines(line, maxw, c, "Helvetica", 10)
+                    for chunk in chunks:
+                        if y <= bm:
+                            c.showPage()
+                            y = height - tm
+                            c.setFont("Helvetica", 10)
+                        c.drawString(lm, y, chunk)
+                        y -= line_h
+            else:
+                # Process English/Latin text
+                chunks = _wrap_lines(line, maxw, c, "Helvetica" if arabic_font == "Helvetica" else arabic_font, 10)
+                for chunk in chunks:
+                    if y <= bm:
+                        c.showPage()
+                        y = height - tm
+                        c.setFont("Helvetica" if arabic_font == "Helvetica" else arabic_font, 10)
+                    c.drawString(lm, y, chunk)
+                    y -= line_h
+
+        c.save()
+        print(f"Enhanced Arabic PDF saved to: {pdf_path}")
+        
+    except Exception as e:
+        print(f"Enhanced PDF generation failed: {e}")
+        traceback.print_exc()
+        # Last resort - basic text PDF
+        try:
+            c = canvas.Canvas(pdf_path, pagesize=LETTER)
+            c.setFont("Helvetica", 10)
+            c.drawString(1*inch, 10*inch, "Meeting Transcript")
+            c.drawString(1*inch, 9.5*inch, title)
+            y = 9*inch
+            for line in pretty_text.splitlines()[:50]:  # Limit lines to prevent errors
+                safe_line = line.encode('ascii', errors='ignore').decode('ascii')
+                c.drawString(1*inch, y, safe_line[:80])  # Limit line length
+                y -= 14
+                if y < 2*inch:
+                    break
+            c.save()
+        except:
+            raise
 
 
 # Initialize manager_agent as None, will be created when needed
@@ -348,12 +673,149 @@ def mark_notification_read():
     
     return jsonify({'success': True})
 
+@app.route('/api/talk-to-calls', methods=['POST'])
+@management_required
+def talk_to_calls():
+    """Chat with team calls data - aggregated summaries and insights"""
+    try:
+        data = request.get_json()
+        user_message = data.get('message', '').strip()
+        
+        if not user_message:
+            return jsonify({'error': 'Message is required'}), 400
+        
+        # Get managed agents based on user role
+        if current_user.role == 'manager':
+            # Managers see their direct reports only
+            managed_agents = current_user.get_managed_agents()
+            managed_agent_ids = [agent.id for agent in managed_agents]
+        else:
+            # SME Leaders see all agents
+            managed_agents = User.query.filter_by(role='salesagent').all()
+            managed_agent_ids = [agent.id for agent in managed_agents]
+        
+        # Get transcripts with meeting summaries from managed agents
+        transcripts = Transcript.query.filter(
+            Transcript.user_id.in_(managed_agent_ids),
+            Transcript.meeting_summary.isnot(None),
+            Transcript.meeting_summary != ''
+        ).order_by(Transcript.created_at.desc()).limit(50).all()
+        
+        # Prepare context from call summaries
+        calls_context = []
+        for transcript in transcripts:
+            agent = User.query.get(transcript.user_id)
+            
+            # Get client name from associated chat session
+            client_name = 'Unknown Client'
+            if transcript.chat_id:
+                chat_session = ChatSession.query.get(transcript.chat_id)
+                if chat_session and chat_session.client_name:
+                    client_name = chat_session.client_name
+            
+            calls_context.append({
+                'agent': agent.username if agent else 'Unknown',
+                'date': transcript.created_at.strftime('%Y-%m-%d %H:%M'),
+                'client': client_name,
+                'title': transcript.title or 'Untitled Meeting',
+                'summary': transcript.meeting_summary,
+                'transcript_snippet': transcript.text[:200] + '...' if len(transcript.text) > 200 else transcript.text
+            })
+        
+        # Create team context with all managed agents (even those without calls)
+        team_context = []
+        for agent in managed_agents:
+            # Count total calls for this agent
+            total_calls = Transcript.query.filter_by(user_id=agent.id).count()
+            calls_with_summaries = Transcript.query.filter(
+                Transcript.user_id == agent.id,
+                Transcript.meeting_summary.isnot(None),
+                Transcript.meeting_summary != ''
+            ).count()
+            
+            # Count unique clients for this agent
+            unique_clients = db.session.query(func.count(func.distinct(ChatSession.client_name)))\
+                .filter(
+                    ChatSession.user_id == agent.id,
+                    ChatSession.client_name.isnot(None),
+                    ChatSession.client_name != ''
+                ).scalar() or 0
+            
+            team_context.append({
+                'agent_name': agent.username,
+                'total_calls': total_calls,
+                'calls_with_summaries': calls_with_summaries,
+                'unique_clients': unique_clients,
+                'manager': current_user.username
+            })
+        
+        # Create system prompt for calls analysis
+        system_prompt = f"""You are a team calls analyst for a sales {'manager' if current_user.role == 'manager' else 'SME leader'}. You have access to meeting summaries and call data from the team.
+
+Your role is to:
+1. Analyze call patterns, trends, and insights
+2. Identify common client concerns, objections, or opportunities  
+3. Provide actionable recommendations for team performance
+4. Answer specific questions about individual calls or overall patterns
+5. Help managers understand their team's sales activities
+
+TEAM OVERVIEW:
+Your team consists of {len(managed_agents)} agents: {', '.join([agent.username for agent in managed_agents])}
+
+Team Performance Summary:
+{json.dumps(team_context, indent=2)}
+
+RECENT CALLS DATA:
+Total calls with summaries analyzed: {len(calls_context)}
+Date range: {transcripts[-1].created_at.strftime('%Y-%m-%d') if transcripts else 'N/A'} to {transcripts[0].created_at.strftime('%Y-%m-%d') if transcripts else 'N/A'}
+
+Detailed call summaries:
+{json.dumps(calls_context, indent=2)}
+
+Guidelines:
+- Be concise but insightful
+- Focus on actionable insights for team management
+- Highlight trends and patterns across agents
+- Reference specific calls when relevant
+- Use bullet points for clarity when appropriate
+- Consider agents who haven't made calls recently as needing attention
+- Provide coaching recommendations where appropriate
+"""
+        
+        # Call OpenAI API
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        assistant_response = response.choices[0].message.content
+        
+        return jsonify({
+            'response': assistant_response,
+            'calls_analyzed': len(calls_context),
+            'team_size': len(managed_agents),
+            'agents_with_calls': len([agent for agent in team_context if agent['calls_with_summaries'] > 0])
+        })
+        
+    except Exception as e:
+        print(f"Error in talk-to-calls: {e}")
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to process request'}), 500
+
 @app.route('/manager/dashboard')
 @management_required
 def manager_dashboard():
-    agent_stats = get_sales_agents_client_stats()
-    dashboard_summary = get_dashboard_summary()
-    productivity_data = get_seller_productivity()
+    # Pass current manager's ID to get only their team's stats
+    manager_id = current_user.id if current_user.role == 'manager' else None
+    
+    agent_stats = get_sales_agents_client_stats(manager_id)
+    dashboard_summary = get_dashboard_summary(manager_id)
+    productivity_data = get_seller_productivity(manager_id)
     predictions_data = get_predictions_data()
     return render_template('manager_dashboard.html', 
                          agent_stats=agent_stats,
@@ -364,10 +826,10 @@ def manager_dashboard():
 @app.route('/smeleader/dashboard')
 @role_required('smeleader')
 def smeleader_dashboard():
-    # SME Leaders get access to manager stats plus manager oversight
-    agent_stats = get_sales_agents_client_stats()
-    dashboard_summary = get_dashboard_summary()
-    productivity_data = get_seller_productivity()
+    # SME Leaders get access to all agents (pass None for manager_id)
+    agent_stats = get_sales_agents_client_stats(None)
+    dashboard_summary = get_dashboard_summary(None)
+    productivity_data = get_seller_productivity(None)
     predictions_data = get_predictions_data()
     
     # Get all managers for SME Leader oversight with their assigned agents count
@@ -389,6 +851,55 @@ def smeleader_dashboard():
                          productivity_data=productivity_data,
                          predictions_data=predictions_data,
                          managers=managers)
+
+@app.route('/api/dashboard-views', methods=['GET', 'POST'])
+@role_required('smeleader')
+def get_dashboard_views():
+    """Get available dashboard views from the views folder"""
+    views_path = os.path.join(app.template_folder, 'views')
+    views = []
+    
+    try:
+        if os.path.exists(views_path):
+            for filename in os.listdir(views_path):
+                if filename.endswith('.html'):
+                    # Remove .html extension and replace underscores with spaces
+                    view_name = filename[:-5].replace('_', ' ')
+                    views.append({
+                        'name': view_name,
+                        'file': filename
+                    })
+        
+        # Sort views alphabetically
+        views.sort(key=lambda x: x['name'])
+        return jsonify(views)
+        
+    except Exception as e:
+        print(f"Error loading dashboard views: {e}")
+        return jsonify([])
+
+@app.route('/smeleader/dashboard/views/<view_file>')
+@role_required('smeleader')
+def render_dashboard_view(view_file):
+    """Render a specific dashboard view"""
+    try:
+        # Sanitize filename to prevent directory traversal
+        if '..' in view_file or '/' in view_file or not view_file.endswith('.html'):
+            return "Invalid view file", 404
+        
+        # Check if view file exists
+        views_path = os.path.join(app.template_folder, 'views')
+        full_path = os.path.join(views_path, view_file)
+        
+        if not os.path.exists(full_path):
+            return "View not found", 404
+        
+        # Render the view template from the views subdirectory
+        return render_template(f'views/{view_file}')
+        
+    except Exception as e:
+        print(f"Error rendering view {view_file}: {e}")
+        return "Error loading view", 500
 
 @app.route('/manager/team')
 @management_required
@@ -553,6 +1064,130 @@ def manage_users():
 
     users = User.query.all()
     return render_template('admin_users.html', users=users)
+
+
+@app.route("/v1/chat", methods=['POST'])
+@login_required
+def chat():
+    data = request.json
+    chat_id = data.get('chat_id')
+    transcript_id = data.get('transcript_id')
+    user_message = data.get('message', '')
+    meeting_context = data.get('meeting_context', '')
+    is_meeting_thread = data.get('is_meeting_thread', False)
+    
+    if not user_message:
+        return jsonify({"error": "Message is required"}), 400
+    
+    try:
+        # For meeting threads, create a specialized prompt
+        if is_meeting_thread and meeting_context:
+            system_prompt = f"""You are Suhail, an expert business consultant and meeting analyst. You're helping the user understand and discuss a specific meeting.
+
+MEETING CONTEXT:
+{meeting_context}
+
+Instructions:
+- Answer questions specifically about this meeting
+- Reference specific details from the meeting summary
+- Provide insights, clarifications, and follow-up suggestions
+- Be conversational and helpful
+- If asked about something not in the meeting, politely redirect to meeting content
+
+User Question: {user_message}"""
+        else:
+            # Regular chat - use default behavior
+            system_prompt = f"You are Suhail, a helpful AI assistant. Please respond to: {user_message}"
+        
+        # Call OpenAI API
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            max_tokens=1000,
+            temperature=0.7
+        )
+        
+        ai_response = response.choices[0].message.content
+        
+        # Save thread messages to database if transcript_id is provided
+        if transcript_id and is_meeting_thread:
+            from models import MeetingThreadMessage
+            
+            # Save user message
+            user_msg = MeetingThreadMessage(
+                transcript_id=transcript_id,
+                user_id=current_user.id,
+                message=user_message,
+                sender='user'
+            )
+            db.session.add(user_msg)
+            
+            # Save AI response
+            ai_msg = MeetingThreadMessage(
+                transcript_id=transcript_id,
+                user_id=current_user.id,
+                message=ai_response,
+                sender='assistant'
+            )
+            db.session.add(ai_msg)
+            db.session.commit()
+        
+        # Save regular chat messages to database if chat_id is provided
+        elif chat_id:
+            # Save user message
+            user_msg = ChatMessage(
+                session_id=chat_id,
+                user_id=current_user.id,
+                message=user_message,
+                sender='user'
+            )
+            db.session.add(user_msg)
+            
+            # Save AI response
+            ai_msg = ChatMessage(
+                session_id=chat_id,
+                user_id=current_user.id,
+                message=ai_response,
+                sender='assistant'
+            )
+            db.session.add(ai_msg)
+            db.session.commit()
+        
+        return jsonify({"response": ai_response})
+        
+    except Exception as e:
+        print(f"Chat error: {str(e)}")
+        return jsonify({"error": "Failed to generate response"}), 500
+
+
+@app.route("/v1/meeting/<int:transcript_id>/thread", methods=['GET'])
+@login_required
+def get_meeting_thread(transcript_id):
+    """Get all thread messages for a specific meeting"""
+    try:
+        from models import MeetingThreadMessage
+        
+        messages = MeetingThreadMessage.query.filter_by(
+            transcript_id=transcript_id,
+            user_id=current_user.id
+        ).order_by(MeetingThreadMessage.created_at).all()
+        
+        thread_data = []
+        for msg in messages:
+            thread_data.append({
+                'message': msg.message,
+                'sender': msg.sender,
+                'created_at': msg.created_at.isoformat()
+            })
+        
+        return jsonify({"messages": thread_data})
+        
+    except Exception as e:
+        print(f"Error loading thread: {str(e)}")
+        return jsonify({"error": "Failed to load thread"}), 500
 
 
 @app.route("/v1/chat/agent", methods=['POST'])
@@ -791,16 +1426,43 @@ def load_chat(chat_id):
     if not session:
         return jsonify({'error': 'Chat session not found'}), 404
 
+    # Get messages and transcripts, then merge and sort by timestamp
     messages = ChatMessage.query.filter_by(session_id=chat_id).order_by(ChatMessage.timestamp).all()
+    transcripts = Transcript.query.filter_by(chat_id=chat_id, user_id=current_user.id).order_by(Transcript.created_at).all()
     
-    return jsonify([
-        {
+    # Combine messages and transcripts into a single timeline
+    timeline = []
+    
+    # Add regular messages
+    for m in messages:
+        timeline.append({
+            'type': 'message',
             'content': m.message,
             'role': 'user' if m.sender == 'user' else 'bot',
             'timestamp': m.timestamp.isoformat()
-        }
-        for m in messages
-    ])
+        })
+    
+    # Add transcripts as special message types
+    for t in transcripts:
+        timeline.append({
+            'type': 'transcript',
+            'transcript_id': t.id,
+            'title': t.title,
+            'content': t.text,
+            'meeting_summary': t.meeting_summary,  # Include the meeting summary
+            'role': 'transcript',
+            'timestamp': t.created_at.isoformat(),
+            'audio_url': url_for('download_audio', transcript_id=t.id) if t.audio_file_path else None,
+            'pdf_url': url_for('download_transcript', transcript_id=t.id) if t.file_path else None,
+            'speakers': t.speakers_count,
+            'duration': t.duration,
+            'language': t.language
+        })
+    
+    # Sort combined timeline by timestamp
+    timeline.sort(key=lambda x: x['timestamp'])
+    
+    return jsonify(timeline)
 
 @app.route('/v1/chat/renamechat', methods=['POST'])
 @login_required
@@ -881,17 +1543,28 @@ def get_chat_summary():
 def transcribe_audio():
     try:
         title = request.form.get('title', 'Live Meeting')
+        chat_id = request.form.get('chat_id')  # Optional chat_id to associate with conversation
 
         if 'audio' not in request.files:
             return jsonify({'error': 'No audio file provided'}), 400
 
-        audio_file = request.files['audio']
-        filename = secure_filename(audio_file.filename or 'meeting.webm')
+        # Validate chat_id if provided
+        if chat_id:
+            chat_session = ChatSession.query.filter_by(id=chat_id, user_id=current_user.id).first()
+            if not chat_session:
+                return jsonify({'error': 'Chat session not found or access denied'}), 404
 
-        # Save to temp
+        audio_file = request.files['audio']
+        filename = secure_filename(audio_file.filename or 'recording.webm')
+
+        # Create directory only for storing transcript files (no audio storage)
+        transcript_base_dir = Path("uploads") / "transcripts" / str(current_user.id)
+        transcript_base_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save to temp for transcription only (don't save permanently)
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp:
             tmp_path = tmp.name
-            audio_file.save(tmp_path)
+            audio_file.save(tmp_path)  # Save directly to temp
 
         # Choose model & response format
         model_name = os.getenv("STT_MODEL", "whisper-1")
@@ -909,6 +1582,8 @@ def transcribe_audio():
         # Parse via dict
         rd = resp.model_dump() if hasattr(resp, "model_dump") else {}
         segments = []
+        duration = None
+
         if use_verbose and isinstance(rd.get("segments"), list):
             for s in rd["segments"]:
                 segments.append({
@@ -916,6 +1591,9 @@ def transcribe_audio():
                     "end": float(s.get("end") or 0.0),
                     "text": (s.get("text") or "").strip()
                 })
+            # Get duration from the last segment if available
+            if segments:
+                duration = max(seg["end"] for seg in segments)
         else:
             text = (rd.get("text") or "").strip()
             segments = [{"start": 0.0, "end": 0.0, "text": text}]
@@ -947,12 +1625,12 @@ def transcribe_audio():
                  for seg in labeled]
         pretty_text = "\n".join(lines).strip()
 
-        # Save PDF
-        base_dir = Path("uploads") / "transcripts" / str(current_user.id)
-        base_dir.mkdir(parents=True, exist_ok=True)
+        # Generate filename components for PDF
         stamp = int(time.time())
-        safe_title = "".join(c for c in title if c.isalnum() or c in (" ", "_", "-")).rstrip() or "meeting"
-        pdf_path = base_dir / f"{stamp}_{safe_title}.pdf"
+        safe_title = "".join(c for c in title if c.isalnum() or c in (" ", "_", "-")).rstrip() or "recording"
+
+        # Save PDF
+        pdf_path = transcript_base_dir / f"{stamp}_{safe_title}.pdf"
 
         write_transcript_pdf(
             str(pdf_path),
@@ -961,34 +1639,76 @@ def transcribe_audio():
             meta={"Model": model_name, "Speakers": str(num_speakers)}
         )
 
-        # DB row (store preview text & file path)
+        # DB row (store only transcript path, no audio storage)
         transcript = Transcript(
             user_id=current_user.id,
-            chat_id=None,
+            chat_id=chat_id,  # This will be None if not provided, or the actual chat_id
             title=title,
-            text=pretty_text  # used for sidebar preview
+            text=pretty_text,  # used for sidebar preview and inline display
+            audio_file_path=None,  # No longer store audio files
+            file_path=str(pdf_path),          # Store path to PDF transcript
+            speakers_count=num_speakers,
+            duration=duration
         )
-        try:
-            transcript.file_path = str(pdf_path)
-            transcript.speakers_count = num_speakers
+        
+        # Set language if available
+        if rd.get("language"):
             transcript.language = rd.get("language")
-        except Exception:
-            pass
 
         db.session.add(transcript)
         db.session.commit()
 
-        # Cleanup temp
-        try: os.remove(tmp_path)
-        except Exception: pass
+        # Generate meeting summary using Suhail Summary Agent
+        try:
+            print(f"[DEBUG] Starting meeting summary generation for transcript {transcript.id}")
+            meeting_metadata = {
+                'customer_name': '[Customer Name Not Specified]',  # Can be enhanced later with client detection
+                'title': title,
+                'duration': f"{int(duration//60)}:{int(duration%60):02d}" if duration else 'Unknown',
+                'participants': f"{num_speakers} speaker{'s' if num_speakers != 1 else ''}",
+                'date_time': transcript.created_at.strftime('%d/%m/%Y, %H:%M'),
+                'recording_link': 'Audio not stored (transcript only)'  # No audio files saved
+            }
+            
+            print(f"[DEBUG] Meeting metadata: {meeting_metadata}")
+            print(f"[DEBUG] Transcript text length: {len(pretty_text)}")
+            
+            # Generate the structured meeting summary
+            meeting_summary = generate_meeting_summary(pretty_text, meeting_metadata)
+            print(f"[DEBUG] Generated meeting summary length: {len(meeting_summary) if meeting_summary else 0}")
+            
+            # Update the transcript with the meeting summary
+            transcript.meeting_summary = meeting_summary
+            db.session.commit()
+            print(f"[DEBUG] Successfully saved meeting summary to database")
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to generate meeting summary: {str(e)}")
+            traceback.print_exc()
+            # Continue without meeting summary if there's an error
+            meeting_summary = None
 
-        return jsonify({
+        # Cleanup temp
+        try: 
+            os.remove(tmp_path)
+        except Exception: 
+            pass
+
+        response_data = {
             "success": True,
             "transcript_id": transcript.id,
             "title": title,
+            "text": pretty_text,
+            "meeting_summary": meeting_summary if meeting_summary else None,  # Handle None case
             "file_url": url_for('download_transcript', transcript_id=transcript.id),
-            "speakers": num_speakers
-        })
+            "audio_url": None,  # No longer providing audio downloads
+            "speakers": num_speakers,
+            "duration": duration,
+            "chat_id": chat_id,
+            "created_at": transcript.created_at.isoformat()
+        }
+
+        return jsonify(response_data)
 
     except Exception as e:
         import traceback; traceback.print_exc()
@@ -998,16 +1718,30 @@ def transcribe_audio():
 @app.route('/v1/transcripts', methods=['GET'])
 @login_required
 def list_transcripts():
-    rows = Transcript.query.filter_by(user_id=current_user.id).order_by(Transcript.created_at.desc()).all()
+    chat_id = request.args.get('chat_id')  # Optional filter by chat_id
+    
+    if chat_id:
+        # Get transcripts for specific chat
+        rows = Transcript.query.filter_by(user_id=current_user.id, chat_id=chat_id).order_by(Transcript.created_at.desc()).all()
+    else:
+        # Get all transcripts for user (original behavior)
+        rows = Transcript.query.filter_by(user_id=current_user.id).order_by(Transcript.created_at.desc()).all()
+    
     out = []
     for t in rows:
-        out.append({
+        transcript_data = {
             "id": t.id,
             "title": t.title,
             "created_at": t.created_at.isoformat(),
             "preview": (t.text[:200] + '...') if len(t.text) > 200 else t.text,
-            "file_url": url_for('download_transcript', transcript_id=t.id)
-        })
+            "file_url": url_for('download_transcript', transcript_id=t.id) if t.file_path else None,
+            "audio_url": url_for('download_audio', transcript_id=t.id) if t.audio_file_path else None,
+            "chat_id": t.chat_id,
+            "speakers": t.speakers_count,
+            "duration": t.duration,
+            "language": t.language
+        }
+        out.append(transcript_data)
     return jsonify(out)
 
 @app.route('/v1/transcripts/<int:transcript_id>/download', methods=['GET'])
@@ -1018,21 +1752,57 @@ def download_transcript(transcript_id):
         return jsonify({"error": "Not found"}), 404
     return send_file(t.file_path, as_attachment=True, download_name=os.path.basename(t.file_path))
 
+@app.route('/v1/transcripts/<int:transcript_id>/audio', methods=['GET'])
+@login_required
+def download_audio(transcript_id):
+    # Audio files are no longer stored to reduce storage usage
+    return jsonify({"error": "Audio files are not stored. Only transcripts are available."}), 404
+
 @app.route('/v1/transcripts/<int:transcript_id>', methods=['DELETE'])
 @login_required
 def delete_transcript(transcript_id):
     t = Transcript.query.filter_by(id=transcript_id, user_id=current_user.id).first()
     if not t:
         return jsonify({"error": "Not found"}), 404
-    # remove file
+    # remove files
     try:
         if t.file_path and os.path.exists(t.file_path):
             os.remove(t.file_path)
+        # Audio files are no longer stored, so no need to delete them
     except Exception as e:
         print("file delete warning:", e)
     db.session.delete(t)
     db.session.commit()
     return jsonify({"success": True})
+
+@app.route('/v1/transcripts/<int:transcript_id>/update', methods=['PUT'])
+@login_required
+def update_transcript(transcript_id):
+    t = Transcript.query.filter_by(id=transcript_id, user_id=current_user.id).first()
+    if not t:
+        return jsonify({"error": "Transcript not found"}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    
+    # Update allowed fields
+    if 'text' in data:
+        t.text = data['text']
+    if 'title' in data:
+        t.title = data['title']
+    if 'meeting_summary' in data:
+        t.meeting_summary = data['meeting_summary']
+    
+    db.session.commit()
+    
+    return jsonify({
+        "success": True,
+        "transcript_id": t.id,
+        "title": t.title,
+        "text": t.text,
+        "meeting_summary": t.meeting_summary
+    })
 
 @app.route('/v1/chat/report', methods=['POST'])
 @login_required
@@ -1693,8 +2463,8 @@ def get_budget_fit_analysis():
         missing_columns = [col for col in required_columns if col not in df.columns]
         
         if missing_columns:
-            print(f"Missing columns in suhail_signals sheet: {missing_columns}")
-            print(f"Available columns: {list(df.columns)}")
+            # print(f"Missing columns in suhail_signals sheet: {missing_columns}")
+            # print(f"Available columns: {list(df.columns)}")
             return jsonify([])
         
         # Calculate averages across all months for each metric
@@ -1718,7 +2488,7 @@ def get_budget_fit_analysis():
             }
         ]
         
-        print(f"Returning budget fit analysis data: {result}")
+        # print(f"Returning budget fit analysis data: {result}")
         return jsonify(result)
         
     except FileNotFoundError as e:
@@ -1740,7 +2510,7 @@ def get_renewals_performance():
         
         # Check if required columns exist
         if 'Month' not in df.columns or 'Renewals_Performance_Pct' not in df.columns:
-            print(f"Available columns in targets_monthly sheet: {list(df.columns)}")
+            # print(f"Available columns in targets_monthly sheet: {list(df.columns)}")
             return jsonify({'error': 'Required columns not found'}), 404
         
         # Get the first non-null performance percentage (since it's consistent across months)
@@ -1773,7 +2543,7 @@ def get_renewals_performance():
             ]
         }
         
-        print(f"Returning renewals performance data: {result}")
+        # print(f"Returning renewals performance data: {result}")
         return jsonify(result)
         
     except FileNotFoundError as e:
@@ -1795,7 +2565,7 @@ def get_new_business_performance():
         
         # Check if required columns exist
         if 'Month' not in df.columns or 'NB_Performance_Pct' not in df.columns:
-            print(f"Available columns in targets_monthly sheet: {list(df.columns)}")
+            # print(f"Available columns in targets_monthly sheet: {list(df.columns)}")
             return jsonify({'error': 'Required columns not found'}), 404
         
         # Get the first non-null performance percentage (since it's consistent across months)
@@ -1828,7 +2598,7 @@ def get_new_business_performance():
             ]
         }
         
-        print(f"Returning new business performance data: {result}")
+        # print(f"Returning new business performance data: {result}")
         return jsonify(result)
         
     except FileNotFoundError as e:
@@ -1850,7 +2620,7 @@ def get_overall_renewal_probability():
         
         # Check if required columns exist
         if 'Month' not in df.columns or '2.3 Overall Renewal Probability Pct' not in df.columns:
-            print(f"Available columns in kpi_monthly sheet: {list(df.columns)}")
+            # print(f"Available columns in kpi_monthly sheet: {list(df.columns)}")
             return jsonify({'error': 'Required columns not found'}), 404
         
         # Process the data
@@ -1862,7 +2632,7 @@ def get_overall_renewal_probability():
                     'probability_pct': float(row['2.3 Overall Renewal Probability Pct'])
                 })
         
-        print(f"Returning overall renewal probability data: {data}")
+        # print(f"Returning overall renewal probability data: {data}")
         return jsonify(data)
         
     except FileNotFoundError as e:
@@ -1887,8 +2657,8 @@ def get_competitor_overview():
         missing_columns = [col for col in required_columns if col not in df.columns]
         
         if missing_columns:
-            print(f"Missing columns in competitor_outcomes sheet: {missing_columns}")
-            print(f"Available columns: {list(df.columns)}")
+            # print(f"Missing columns in competitor_outcomes sheet: {missing_columns}")
+            # print(f"Available columns: {list(df.columns)}")
             return jsonify({'error': f'Required columns not found: {missing_columns}'}), 404
         
         # Group by Competitor and calculate average win rate
@@ -1908,8 +2678,8 @@ def get_competitor_overview():
         # Sort by win rate descending for better visualization
         data.sort(key=lambda x: x['avg_win_rate'], reverse=True)
         
-        print(f"Available columns in competitor_outcomes: {list(df.columns)}")
-        print(f"Returning competitor overview averages: {data}")
+        # print(f"Available columns in competitor_outcomes: {list(df.columns)}")
+        # print(f"Returning competitor overview averages: {data}")
         return jsonify(data)
         
     except FileNotFoundError as e:
@@ -1950,6 +2720,71 @@ def get_renewal_heatmap():
         traceback.print_exc()
         return jsonify({'error': f'Failed to load heatmap data: {str(e)}'}), 500
 
+@app.route('/api/regional/whale-curve-data', methods=['GET'])
+@role_required('smeleader')
+def get_whale_curve_data():
+    """Get Whale Curve data from client_data.xlsx for Regional Retention Dashboard"""
+    try:
+        # Read the Sheet1 from client_data.xlsx
+        df = pd.read_excel('client_data.xlsx', sheet_name='Sheet1')
+        
+        # Debug: Print available columns
+        print(f"Available columns in client_data.xlsx: {list(df.columns)}")
+        
+        # Check if required columns exist and find the correct column names
+        column_mapping = {}
+        
+        # Look for employee/name column
+        for col in df.columns:
+            col_lower = col.lower().strip()
+            if 'employee' in col_lower or 'name' in col_lower:
+                column_mapping['employee'] = col
+                break
+        
+        # Look for %Ach column
+        for col in df.columns:
+            if '%Ach' in col or 'ach' in col.lower():
+                column_mapping['pct_ach'] = col
+                break
+        
+        # Look for Cum-Booked% column
+        for col in df.columns:
+            if 'cum-booked' in col.lower() or 'booked' in col.lower():
+                column_mapping['cum_booked'] = col
+                break
+        
+        print(f"Column mapping found: {column_mapping}")
+        
+        if not column_mapping.get('employee'):
+            return jsonify({'error': 'Employee/Name column not found. Available columns: ' + str(list(df.columns))}), 404
+        
+        # Extract the data using the found column names
+        data = []
+        for index, row in df.iterrows():
+            if pd.notna(row[column_mapping['employee']]):
+                employee_name = str(row[column_mapping['employee']]).strip()
+                pct_ach = float(row[column_mapping.get('pct_ach', column_mapping['employee'])]) if column_mapping.get('pct_ach') and pd.notna(row[column_mapping['pct_ach']]) else 0
+                cum_booked_pct = float(row[column_mapping.get('cum_booked', column_mapping['employee'])]) if column_mapping.get('cum_booked') and pd.notna(row[column_mapping['cum_booked']]) else 0
+                
+                data.append({
+                    'employee': employee_name,
+                    'pct_ach': pct_ach,
+                    'cum_booked_pct': cum_booked_pct,
+                    'index': index  # Keep original order for x-axis
+                })
+        
+        print(f"Processed {len(data)} data points")
+        return jsonify(data)
+        
+    except FileNotFoundError as e:
+        print(f"File not found error: {e}")
+        return jsonify({'error': 'Client data Excel file not found'}), 404
+    except Exception as e:
+        print(f"Error in get_whale_curve_data: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to load whale curve data: {str(e)}'}), 500
+
 if __name__ == '__main__':
     with app.app_context():
         # Check if we need to add manager_id column
@@ -1963,5 +2798,23 @@ if __name__ == '__main__':
                 conn.execute(db.text("ALTER TABLE user ADD COLUMN manager_id INTEGER"))
                 conn.commit()
                 print("Added manager_id column to user table")
+        
+        # Check if we need to add new transcript columns
+        transcript_columns = [column['name'] for column in inspector.get_columns('transcript')]
+        
+        if 'audio_file_path' not in transcript_columns:
+            # Add the audio_file_path column to existing database
+            with db.engine.connect() as conn:
+                conn.execute(db.text("ALTER TABLE transcript ADD COLUMN audio_file_path VARCHAR"))
+                conn.commit()
+                print("Added audio_file_path column to transcript table")
+        
+        if 'duration' not in transcript_columns:
+            # Add the duration column to existing database
+            with db.engine.connect() as conn:
+                conn.execute(db.text("ALTER TABLE transcript ADD COLUMN duration FLOAT"))
+                conn.commit()
+                print("Added duration column to transcript table")
+        
         db.create_all()
-    app.run(host='0.0.0.0', port=5002, debug=True)
+    app.run(host='0.0.0.0', port=5002, debug=True, ssl_context=('ssl_keys/cert.pem', 'ssl_keys/key.pem'))

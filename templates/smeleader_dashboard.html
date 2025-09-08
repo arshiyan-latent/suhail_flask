@@ -79,6 +79,20 @@
                     <button id="live-mode" class="px-3 py-1 text-sm rounded-md transition-all bg-white/20 text-white font-medium">Live</button>
                     <button id="whatif-mode" class="px-3 py-1 text-sm rounded-md transition-all text-white/70 hover:text-white">What-If Lab</button>
                 </div>
+                <!-- Views Dropdown (Added) -->
+                <div class="relative" id="views-container">
+                    <button id="views-dropdown-btn" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all text-sm font-medium flex items-center space-x-2">
+                        <span>Views</span>
+                        <svg id="views-dropdown-icon" class="w-4 h-4 text-white/70 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div id="views-dropdown-menu" class="absolute right-0 mt-2 w-56 bg-gray-900/95 backdrop-blur-md border border-white/10 rounded-lg shadow-lg p-2 opacity-0 invisible transform scale-95 transition-all z-50">
+                        <div class="text-white/60 text-xs px-2 py-1">Available Views</div>
+                        <a href="/smeleader/dashboard/views/Regional_Retention_Dashboard.html" class="flex items-center px-3 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 rounded-md transition-all group">
+                            <svg class="w-4 h-4 mr-3 text-white/60 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2M9 9a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                            Regional Retention Dashboard
+                        </a>
+                    </div>
+                </div>
                 <a href="/" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Back to Chat</a>
                 <a href="/logout" class="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">Logout</a>
             </div>
@@ -830,6 +844,40 @@
             
             // Reset button
             document.getElementById('reset-scenario').addEventListener('click', resetScenarioValues);
+            
+            // Views dropdown functionality
+            const viewsDropdownBtn = document.getElementById('views-dropdown-btn');
+            const viewsDropdownMenu = document.getElementById('views-dropdown-menu');
+            const viewsDropdownIcon = document.getElementById('views-dropdown-icon');
+            let isViewsDropdownOpen = false;
+            
+            // Toggle dropdown on button click
+            viewsDropdownBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                isViewsDropdownOpen = !isViewsDropdownOpen;
+                
+                if (isViewsDropdownOpen) {
+                    // Show dropdown
+                    viewsDropdownMenu.classList.remove('opacity-0', 'invisible', 'scale-95');
+                    viewsDropdownMenu.classList.add('opacity-100', 'visible', 'scale-100');
+                    viewsDropdownIcon.style.transform = 'rotate(180deg)';
+                } else {
+                    // Hide dropdown
+                    viewsDropdownMenu.classList.remove('opacity-100', 'visible', 'scale-100');
+                    viewsDropdownMenu.classList.add('opacity-0', 'invisible', 'scale-95');
+                    viewsDropdownIcon.style.transform = 'rotate(0deg)';
+                }
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!document.getElementById('views-container').contains(e.target)) {
+                    isViewsDropdownOpen = false;
+                    viewsDropdownMenu.classList.remove('opacity-100', 'visible', 'scale-100');
+                    viewsDropdownMenu.classList.add('opacity-0', 'invisible', 'scale-95');
+                    viewsDropdownIcon.style.transform = 'rotate(0deg)';
+                }
+            });
             
             // Window resize handler to maintain proper scaling
             window.addEventListener('resize', function() {

@@ -77,3 +77,8 @@ The application uses two SQLite databases:
 users.db - User & Chat Data
 
 2. suhail_database.db - AI Conversation Memory
+
+
+## Converting into https and Adding SSL Keys
+Two files "cert.pem" and "key.pem" needs to be created in the folder "ssl_keys" by running the openssl command
+> openssl req -x509 -newkey rsa:4096 -nodes -out ssl_keys/cert.pem -keyout ssl_keys/key.pem -days 365

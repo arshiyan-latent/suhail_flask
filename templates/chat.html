@@ -103,6 +103,64 @@
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
   }
+
+  /* Meeting Summary Specific Styles */
+  .meeting-summary-bubble {
+    animation: slideInBlue 0.4s ease-out;
+  }
+
+  .meeting-summary-text h1, 
+  .meeting-summary-text h2, 
+  .meeting-summary-text h3 {
+    color: #93c5fd !important;
+    margin: 1rem 0 0.5rem 0;
+    font-weight: bold;
+  }
+
+  .meeting-summary-text ul, 
+  .meeting-summary-text ol {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+  }
+
+  .meeting-summary-text li {
+    margin: 0.25rem 0;
+    color: #bfdbfe !important;
+  }
+
+  .meeting-summary-text p {
+    margin: 0.5rem 0;
+    color: #dbeafe !important;
+  }
+
+  .meeting-summary-text strong {
+    color: #60a5fa !important;
+    font-weight: bold;
+  }
+
+  /* Override any prose styles that might be interfering */
+  .meeting-summary-text * {
+    color: #dbeafe !important;
+  }
+
+  .meeting-summary-text h1,
+  .meeting-summary-text h2,
+  .meeting-summary-text h3,
+  .meeting-summary-text h4,
+  .meeting-summary-text h5,
+  .meeting-summary-text h6 {
+    color: #93c5fd !important;
+  }
+
+  .meeting-summary-text strong,
+  .meeting-summary-text b {
+    color: #60a5fa !important;
+  }
+
+  @keyframes slideInBlue {
+    from { opacity: 0; transform: translateX(-10px) scale(0.98); }
+    to { opacity: 1; transform: translateX(0) scale(1); }
+  }
 </style>
 
   <!-- Sidebar -->
@@ -368,9 +426,16 @@
             const blob = new Blob(chunks, { type });
             const useOgg = type.includes('ogg');
 
+            const title = prompt('Enter a title for this recording:', 'Live Meeting') || 'Live Meeting';
+
             const form = new FormData();
-            form.append('audio', blob, `meeting.${useOgg ? 'ogg' : 'webm'}`);
-            form.append('title', 'Live Meeting');
+            form.append('audio', blob, `recording.${useOgg ? 'ogg' : 'webm'}`);
+            form.append('title', title);
+            
+            // Associate with current chat if available
+            if (currentChatId) {
+              form.append('chat_id', currentChatId);
+            }
 
             const note = document.createElement('span');
             note.className = 'text-white/70 text-xs';
@@ -380,8 +445,33 @@
             try {
               const resp = await fetch('/api/transcribe', { method:'POST', body: form });
               const data = await resp.json();
+              console.log('[DEBUG] Transcribe response:', data);
               if (!resp.ok || !data.success) throw new Error(data.error || 'Failed');
               note.textContent = 'Saved ✓';
+              
+              // Add the transcript bubble immediately
+              if (data.text) {
+                console.log('[DEBUG] Adding transcript bubble...');
+                renderTranscriptBubble({
+                  transcript_id: data.transcript_id,
+                  title: data.title,
+                  content: data.text,
+                  timestamp: data.created_at,
+                  audio_url: null, // Audio no longer stored
+                  pdf_url: data.file_url,
+                  speakers: data.speakers,
+                  duration: data.duration
+                });
+              }
+              
+              // Display meeting summary if available
+              if (data.meeting_summary) {
+                console.log('[DEBUG] Meeting summary found in response, rendering immediately...');
+                renderMeetingSummaryBubble(data.meeting_summary, data);
+              } else {
+                console.log('[DEBUG] No meeting summary in response');
+              }
+              
               await loadTranscripts();      // refresh sidebar list
             } catch (e) {
               console.error(e); note.textContent = 'Failed';
@@ -555,6 +645,385 @@
     chatWindow.scrollTop = chatWindow.scrollHeight;
   };
 
+  const renderMeetingSummaryBubble = (meetingSummary, transcriptData) => {
+    const bubble = document.createElement('div');
+    bubble.className = 'w-full bg-blue-600/20 border border-blue-400 px-4 py-3 rounded-xl self-start markdown transcript-bubble';
+    bubble.dataset.transcriptId = transcriptData.transcript_id;
+    
+    const formatDuration = (seconds) => {
+      if (!seconds) return '';
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+    
+    bubble.innerHTML = `
+      <div class="transcript-header flex items-center justify-between mb-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <div>
+            <h4 class="font-semibold text-blue-100">Meeting Summary - ${transcriptData.title}</h4>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="toggleMeetingSummary(${transcriptData.transcript_id})" class="p-1 text-blue-200 hover:text-blue-100 transition-colors" title="Show/Hide Summary">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z"/>
+            </svg>
+          </button>
+          <button onclick="toggleMeetingThread(${transcriptData.transcript_id})" class="p-1 text-blue-200 hover:text-blue-100 transition-colors" title="Chat About Meeting">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M20,2H4A2,2 0 0,0 2,4V22L6,18H20A2,2 0 0,0 22,16V4C22,2.89 21.1,2 20,2Z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="transcript-text" id="meeting-summary-text-${transcriptData.transcript_id}" style="position: relative; z-index: 100;">
+        <div class="bg-black/20 rounded p-3 text-sm rendered-markdown" style="position: relative; z-index: 101;">
+          ${marked.parse(meetingSummary || 'Meeting summary could not be generated.')}
+        </div>
+        <button onclick="editMeetingSummary(${transcriptData.transcript_id})" class="mt-2 text-xs text-blue-300 hover:text-blue-100 transition-colors">
+          Edit Summary
+        </button>
+      </div>
+      
+      <!-- Meeting Thread Section -->
+      <div class="meeting-thread hidden mt-3 border-t border-blue-400/30 pt-3" id="meeting-thread-${transcriptData.transcript_id}">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-xs text-blue-300">💬 Chat about this meeting</div>
+          <button onclick="toggleMeetingThread(${transcriptData.transcript_id})" class="text-xs text-blue-400 hover:text-blue-200">
+            ✕ Close
+          </button>
+        </div>
+        
+        <!-- Thread Messages Container - Full width and scrollable -->
+        <div class="meeting-thread-messages mb-3 max-h-60 overflow-y-auto bg-black/10 rounded p-2" 
+             id="thread-messages-${transcriptData.transcript_id}">
+          <!-- Thread messages will appear here -->
+        </div>
+        
+        <!-- Thread Input - 60% width -->
+        <div class="flex space-x-2">
+          <input type="text" 
+                 class="bg-black/30 border border-blue-400/50 rounded px-3 py-2 text-white text-sm placeholder-gray-400 focus:outline-none focus:border-blue-400"
+                 style="width: 60%;"
+                 placeholder="Ask about this meeting..."
+                 id="thread-input-${transcriptData.transcript_id}"
+                 onkeypress="handleThreadKeypress(event, ${transcriptData.transcript_id})">
+          <button onclick="sendThreadMessage(${transcriptData.transcript_id})" 
+                  class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm transition-colors">
+            Send
+          </button>
+        </div>
+      </div>
+      </div>
+    `;
+    
+    chatWindow.appendChild(bubble);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+    console.log('[DEBUG] Meeting summary bubble added to DOM with enhanced visibility and z-index');
+    
+    // Debug: Check if bubble is visible after a short delay
+    setTimeout(() => {
+      const addedBubble = document.querySelector(`[data-transcript-id="${transcriptData.transcript_id}"]`);
+      if (addedBubble) {
+        console.log('[DEBUG] Bubble still exists in DOM after 500ms');
+        console.log('[DEBUG] Bubble visibility:', window.getComputedStyle(addedBubble).visibility);
+        console.log('[DEBUG] Bubble display:', window.getComputedStyle(addedBubble).display);
+        console.log('[DEBUG] Bubble z-index:', window.getComputedStyle(addedBubble).zIndex);
+      } else {
+        console.error('[ERROR] Bubble was removed from DOM!');
+      }
+    }, 500);
+  };
+
+  // Function to toggle meeting summary visibility
+  const toggleMeetingSummary = (transcriptId) => {
+    const summaryDiv = document.getElementById(`meeting-summary-text-${transcriptId}`);
+    if (summaryDiv.classList.contains('hidden')) {
+      summaryDiv.classList.remove('hidden');
+    } else {
+      summaryDiv.classList.add('hidden');
+    }
+  };
+
+  // Function to toggle meeting thread visibility
+  const toggleMeetingThread = async (transcriptId) => {
+    const threadDiv = document.getElementById(`meeting-thread-${transcriptId}`);
+    if (threadDiv.classList.contains('hidden')) {
+      threadDiv.classList.remove('hidden');
+      
+      // Load existing thread messages
+      await loadThreadMessages(transcriptId);
+      
+      // Focus on the input when opening the thread
+      setTimeout(() => {
+        document.getElementById(`thread-input-${transcriptId}`).focus();
+      }, 100);
+    } else {
+      threadDiv.classList.add('hidden');
+    }
+  };
+
+  // Load existing thread messages
+  const loadThreadMessages = async (transcriptId) => {
+    try {
+      const response = await fetch(`/v1/meeting/${transcriptId}/thread`);
+      if (response.ok) {
+        const data = await response.json();
+        const messagesDiv = document.getElementById(`thread-messages-${transcriptId}`);
+        messagesDiv.innerHTML = ''; // Clear existing messages
+        
+        data.messages.forEach(msg => {
+          if (msg.sender === 'user') {
+            const userBubble = document.createElement('div');
+            userBubble.className = 'mb-2 text-right';
+            userBubble.innerHTML = `<div class="inline-block bg-blue-600 text-white px-3 py-2 rounded-lg text-sm max-w-lg break-words">${msg.message}</div>`;
+            messagesDiv.appendChild(userBubble);
+          } else {
+            const aiBubble = document.createElement('div');
+            aiBubble.className = 'mb-2';
+            aiBubble.innerHTML = `<div class="inline-block bg-gray-700 text-white px-3 py-2 rounded-lg text-sm max-w-2xl break-words rendered-markdown">${marked.parse(msg.message)}</div>`;
+            messagesDiv.appendChild(aiBubble);
+          }
+        });
+        
+        // Scroll to bottom
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+    } catch (error) {
+      console.error('Error loading thread messages:', error);
+    }
+  };
+
+  // Handle Enter key in thread input
+  const handleThreadKeypress = (event, transcriptId) => {
+    if (event.key === 'Enter') {
+      sendThreadMessage(transcriptId);
+    }
+  };
+
+  // Send message in meeting thread
+  const sendThreadMessage = async (transcriptId) => {
+    const input = document.getElementById(`thread-input-${transcriptId}`);
+    const message = input.value.trim();
+    
+    if (!message) return;
+    
+    const messagesDiv = document.getElementById(`thread-messages-${transcriptId}`);
+    
+    // Add user message to thread
+    const userBubble = document.createElement('div');
+    userBubble.className = 'mb-2 text-right';
+    userBubble.innerHTML = `<div class="inline-block bg-blue-600 text-white px-3 py-2 rounded-lg text-sm max-w-lg break-words">${message}</div>`;
+    messagesDiv.appendChild(userBubble);
+    
+    // Clear input
+    input.value = '';
+    
+    // Add loading indicator with Suhail thinking animation
+    const loadingBubble = document.createElement('div');
+    loadingBubble.className = 'mb-2';
+    loadingBubble.innerHTML = `
+      <div class="inline-block bg-gray-600 text-white px-3 py-2 rounded-lg text-sm flex items-center space-x-2">
+        <div class="flex space-x-1">
+          <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
+          <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style="animation-delay: 0.1s;"></div>
+          <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style="animation-delay: 0.2s;"></div>
+        </div>
+        <span>Suhail is thinking...</span>
+      </div>
+    `;
+    messagesDiv.appendChild(loadingBubble);
+    
+    // Scroll to bottom
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    
+    try {
+      // Get the meeting summary for context
+      const summaryElement = document.querySelector(`#meeting-summary-text-${transcriptId} .rendered-markdown`);
+      const meetingSummary = summaryElement ? summaryElement.textContent : '';
+      
+      // Send request to chat endpoint with meeting context
+      const response = await fetch('/v1/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: message,
+          transcript_id: transcriptId,
+          meeting_context: meetingSummary,
+          is_meeting_thread: true
+        }),
+      });
+      
+      // Remove loading bubble
+      loadingBubble.remove();
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Add AI response to thread
+        const aiBubble = document.createElement('div');
+        aiBubble.className = 'mb-2';
+        aiBubble.innerHTML = `<div class="inline-block bg-gray-700 text-white px-3 py-2 rounded-lg text-sm max-w-2xl break-words rendered-markdown">${marked.parse(data.response || 'No response')}</div>`;
+        messagesDiv.appendChild(aiBubble);
+      } else {
+        const errorBubble = document.createElement('div');
+        errorBubble.className = 'mb-2';
+        errorBubble.innerHTML = `<div class="inline-block bg-red-600 text-white px-3 py-2 rounded-lg text-sm break-words">Error: Unable to get response</div>`;
+        messagesDiv.appendChild(errorBubble);
+      }
+      
+      // Scroll to bottom
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      
+    } catch (error) {
+      console.error('Thread message error:', error);
+      loadingBubble.remove();
+      
+      const errorBubble = document.createElement('div');
+      errorBubble.className = 'mb-2';
+      errorBubble.innerHTML = `<div class="inline-block bg-red-600 text-white px-3 py-2 rounded-lg text-sm break-words">Error: ${error.message}</div>`;
+      messagesDiv.appendChild(errorBubble);
+      
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+  };
+
+  // Function to edit meeting summary (similar to transcript editing)
+  const editMeetingSummary = async (transcriptId) => {
+    const textElement = document.querySelector(`#meeting-summary-text-${transcriptId} pre`);
+    const currentText = textElement.textContent;
+    
+    const newText = prompt('Edit meeting summary:', currentText);
+    if (newText === null || newText === currentText) return;
+    
+    try {
+      const response = await fetch(`/v1/transcripts/${transcriptId}/update`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ meeting_summary: newText })
+      });
+      
+      if (response.ok) {
+        textElement.textContent = newText;
+        alert('Meeting summary updated successfully!');
+      } else {
+        throw new Error('Failed to update meeting summary');
+      }
+    } catch (error) {
+      console.error('Error updating meeting summary:', error);
+      alert('Failed to update meeting summary: ' + error.message);
+    }
+  };
+
+  const renderTranscriptBubble = (transcript) => {
+    const bubble = document.createElement('div');
+    bubble.className = 'w-full bg-yellow-600/20 border border-yellow-400 px-4 py-3 rounded-xl self-start markdown transcript-bubble';
+    bubble.dataset.transcriptId = transcript.transcript_id;
+    
+    const formatDuration = (seconds) => {
+      if (!seconds) return '';
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const durationText = transcript.duration ? ` (${formatDuration(transcript.duration)})` : '';
+    const speakersText = transcript.speakers ? ` • ${transcript.speakers} speaker${transcript.speakers !== 1 ? 's' : ''}` : '';
+    const timestamp = new Date(transcript.timestamp).toLocaleString();
+    
+    bubble.innerHTML = `
+      <div class="transcript-header flex items-center justify-between mb-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+            </svg>
+          </div>
+          <div>
+            <h4 class="font-semibold text-yellow-100">${transcript.title}</h4>
+            <p class="text-xs text-yellow-200">${timestamp}${durationText}${speakersText}</p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="toggleTranscriptText(${transcript.transcript_id})" class="p-1 text-yellow-200 hover:text-yellow-100 transition-colors" title="Show/Hide Transcript">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z"/>
+            </svg>
+          </button>
+          ${transcript.pdf_url ? `<a href="${transcript.pdf_url}" class="p-1 text-yellow-200 hover:text-yellow-100 transition-colors" title="Download PDF">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+            </svg>
+          </a>` : ''}
+        </div>
+      </div>
+      <div class="transcript-text hidden" id="transcript-text-${transcript.transcript_id}">
+        <div class="bg-black/20 rounded p-3 max-h-40 overflow-y-auto text-sm">
+          <pre class="whitespace-pre-wrap text-gray-200">${transcript.content}</pre>
+        </div>
+        <button onclick="editTranscript(${transcript.transcript_id})" class="mt-2 text-xs text-yellow-300 hover:text-yellow-100 transition-colors">
+          Edit Transcript
+        </button>
+      </div>
+    `;
+    
+    chatWindow.appendChild(bubble);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  };
+
+  // Transcript interaction functions
+  const toggleTranscriptText = (transcriptId) => {
+    const textDiv = document.getElementById(`transcript-text-${transcriptId}`);
+    if (textDiv.classList.contains('hidden')) {
+      textDiv.classList.remove('hidden');
+    } else {
+      textDiv.classList.add('hidden');
+    }
+  };
+
+  // Audio playback is no longer available (audio files are not stored)
+  const playAudio = (audioUrl) => {
+    alert('Audio files are no longer stored to reduce storage usage. Only transcripts are available.');
+  };
+
+  const editTranscript = async (transcriptId) => {
+    const textElement = document.querySelector(`#transcript-text-${transcriptId} pre`);
+    const currentText = textElement.textContent;
+    
+    const newText = prompt('Edit transcript:', currentText);
+    if (newText === null || newText === currentText) return;
+    
+    try {
+      const response = await fetch(`/v1/transcripts/${transcriptId}/update`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: newText })
+      });
+      
+      if (response.ok) {
+        textElement.textContent = newText;
+        alert('Transcript updated successfully!');
+      } else {
+        throw new Error('Failed to update transcript');
+      }
+    } catch (error) {
+      console.error('Error updating transcript:', error);
+      alert('Failed to update transcript: ' + error.message);
+    }
+  };
+
   async function createNewChatAndAssign(clientName = null) {
     const requestBody = { user_id: user_id };
     if (clientName) {
@@ -665,6 +1134,7 @@
 
   //WILL NEED UPDATE
   async function loadChatById(chatId) {
+    console.log('[DEBUG] loadChatById called with:', chatId);
     if (!chatId) {
       console.error("Chat ID is undefined. Skipping load.");
       return;
@@ -672,6 +1142,7 @@
     currentChatId = chatId;
     window.currentChatId = currentChatId; // Update global variable for chat ID
     chatCreated = true;
+    console.log('[DEBUG] Clearing chat window...');
     chatWindow.innerHTML = '';
     input.value = '';
 
@@ -679,15 +1150,31 @@
       const res = await fetch(`/v1/chat/loadchat/${chatId}`);
       if (!res.ok) throw new Error('Failed to load chat');
 
-      const messages = await res.json();
+      const timeline = await res.json();
+      console.log('[DEBUG] Timeline loaded:', timeline.length, 'items');
 
-      messages.forEach(msg => {
-        renderMarkdownBubble(
-          msg.role === "user" ? msg.content : msg.content,
-          msg.role === "user"
-            ? "max-w-xs bg-purple-600 px-4 py-2 rounded-xl self-end ml-auto"
-            : "w-full bg-white/10 px-4 py-2 rounded-xl self-start"
-        );
+      timeline.forEach((item, index) => {
+        console.log(`[DEBUG] Processing timeline item ${index}:`, item.type, item.meeting_summary ? 'HAS_SUMMARY' : 'NO_SUMMARY');
+        if (item.type === 'message') {
+          // Regular message
+          renderMarkdownBubble(
+            item.content,
+            item.role === "user"
+              ? "max-w-xs bg-purple-600 px-4 py-2 rounded-xl self-end ml-auto"
+              : "w-full bg-white/10 px-4 py-2 rounded-xl self-start"
+          );
+        } else if (item.type === 'transcript') {
+          // Transcript entry
+          renderTranscriptBubble(item);
+          
+          // If there's a meeting summary, render it after the transcript
+          if (item.meeting_summary) {
+            console.log('[DEBUG] Found meeting summary, rendering immediately...');
+            renderMeetingSummaryBubble(item.meeting_summary, item);
+          } else {
+            console.log('[DEBUG] No meeting summary for this transcript');
+          }
+        }
       });
     } catch (err) {
       renderMarkdownBubble("**Error:** Couldn't load chat history.", "w-full bg-red-600 px-4 py-2 rounded-xl self-start");
